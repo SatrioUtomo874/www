@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c1422">
+  <meta name="description" content="Tambahkan metadata lokasi GPS ke banyak foto JPG/JPEG sekaligus. Proses privat langsung di browser tanpa mengunggah foto ke server.">
+  <meta name="toolspace:title" content="GeoTag Studio">
+  <meta name="toolspace:category" content="Photo & Media">
+  <meta name="toolspace:status" content="ready">
+  <meta name="toolspace:status-label" content="Beta · siap diuji">
+  <meta name="toolspace:tag" content="GPS · EXIF · Batch Photos">
+  <meta name="toolspace:symbol" content="⌖">
+  <meta name="toolspace:art" content="default">
+  <meta name="toolspace:thumbnail" content="assets/thumbnail.svg">
+  <meta name="toolspace:url" content="/GeoTag_Studio/">
+  <meta name="toolspace:visible" content="true">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="GeoTag Studio">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg></span>
+        <span>GEOTAG <strong>STUDIO</strong></span>
+      </a>
+      <div class="local-pill"><span class="pulse-dot"></span> LOCAL PROCESSING</div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="eyebrow">PHOTO LOCATION · EXIF GPS</div>
+        <h1>Let your photos<br><span>remember the place.</span></h1>
+        <p class="hero-copy">Tambahkan koordinat GPS ke banyak foto JPG/JPEG sekaligus. Pilih folder atau beberapa foto, atur titik lokasi, lalu unduh salinan yang sudah diberi metadata.</p>
+        <div class="hero-chips">
+          <span><svg viewBox="0 0 20 20"><path d="m4 10 4 4 8-8"/></svg> Tanpa upload</span>
+          <span><svg viewBox="0 0 20 20"><path d="m4 10 4 4 8-8"/></svg> Foto asli aman</span>
+          <span><svg viewBox="0 0 20 20"><path d="m4 10 4 4 8-8"/></svg> Offline setelah dibuka</span>
+        </div>
+      </section>
+
+      <section class="workspace" aria-label="Pengaturan GeoTag">
+        <div class="section-heading">
+          <div>
+            <div class="step-label">01 / SUMBER FOTO</div>
+            <h2>Pilih foto</h2>
+          </div>
+          <span class="format-tag">JPG · JPEG</span>
+        </div>
+
+        <div class="dropzone" id="dropzone" tabindex="0" role="group" aria-label="Pilih folder atau foto JPG dan JPEG">
+          <input id="folderInput" type="file" accept=".jpg,.jpeg,image/jpeg" webkitdirectory directory multiple aria-label="Pilih folder foto">
+          <input id="filesInput" type="file" accept=".jpg,.jpeg,image/jpeg" multiple aria-label="Pilih beberapa foto">
+          <span class="upload-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></span>
+          <strong id="dropTitle">Tarik foto ke sini atau pilih sumber</strong>
+          <span id="dropHint">Bisa memilih satu folder beserta subfolder atau beberapa foto sekaligus.</span>
+          <div class="source-actions">
+            <button class="source-action" type="button" id="chooseFolder">Pilih folder</button>
+            <button class="source-action source-action-secondary" type="button" id="chooseFiles">Pilih beberapa foto</button>
+          </div>
+          <span class="drop-note">Hanya JPG/JPEG · Struktur subfolder dipertahankan</span>
+        </div>
+
+        <div class="file-summary hidden" id="fileSummary">
+          <div class="summary-icon"><svg viewBox="0 0 24 24"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5H10l2 2h6.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z"/></svg></div>
+          <div class="summary-text"><strong id="folderName">Folder dipilih</strong><span id="folderMeta">0 foto JPG/JPEG ditemukan</span></div>
+          <button class="text-button" type="button" id="changeFolder">Ganti sumber</button>
+        </div>
+        <p class="file-warning hidden" id="fileWarning" role="status"></p>
+        <div class="preview-list hidden" id="previewList" aria-live="polite"></div>
+
+        <div class="section-heading coordinates-heading">
+          <div>
+            <div class="step-label">02 / KOORDINAT LOKASI</div>
+            <h2>Masukkan titik GPS</h2>
+          </div>
+          <span class="format-tag">DECIMAL DEGREES</span>
+        </div>
+        <div class="coordinate-grid">
+          <label class="field">
+            <span>Latitude <small>−90 sampai 90</small></span>
+            <div class="input-wrap"><span class="input-symbol">LAT</span><input id="latitude" type="number" inputmode="decimal" step="any" min="-90" max="90" placeholder="-7.257500" autocomplete="off"></div>
+          </label>
+          <label class="field">
+            <span>Longitude <small>−180 sampai 180</small></span>
+            <div class="input-wrap"><span class="input-symbol">LON</span><input id="longitude" type="number" inputmode="decimal" step="any" min="-180" max="180" placeholder="112.752100" autocomplete="off"></div>
+          </label>
+        </div>
+        <div class="coordinate-actions">
+          <button class="geo-button" type="button" id="useLocation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg> Gunakan lokasi perangkat</button>
+          <span class="field-hint">Atau salin koordinat desimal dari Google Maps. Lokasi perangkat adalah posisi saat ini, bukan otomatis lokasi saat foto diambil.</span>
+        </div>
+        <p class="field-hint" id="coordinateHint">Lokasi perangkat hanya dibaca setelah kamu menekan tombol dan memberi izin browser. Koordinat tidak dikirim ke server.</p>
+
+        <div class="privacy-warning" role="note">
+          <strong>Perhatikan privasi lokasi.</strong> Koordinat GPS yang ditambahkan dapat dibaca dari metadata foto ketika dibagikan. Pastikan titik yang dimasukkan memang boleh dibagikan.
+        </div>
+
+        <div class="location-preview" id="locationPreview">
+          <span class="location-pin"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg></span>
+          <div><strong>Lokasi belum diatur</strong><span>Koordinat akan diterapkan sama ke seluruh foto.</span></div>
+        </div>
+
+        <div class="section-heading settings-heading">
+          <div>
+            <div class="step-label">03 / EKSPOR</div>
+            <h2>Pengaturan hasil</h2>
+          </div>
+        </div>
+        <div class="settings-card">
+          <div class="setting-row">
+            <span class="setting-icon"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+            <div class="setting-copy"><strong>Foto asli tetap aman</strong><span>Hasil diproses sebagai salinan di dalam ZIP.</span></div>
+            <span class="status-check">✓</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><path d="M8 4v16"/></svg></span>
+            <div class="setting-copy"><strong>Struktur subfolder dipertahankan</strong><span>Foto dalam subfolder tetap berada di jalur relatifnya.</span></div>
+            <span class="status-check">✓</span>
+          </div>
+          <label class="filename-field"><span>Nama file ZIP</span><div><input id="zipName" type="text" value="hasil_geotag_foto" maxlength="70"><span>.zip</span></div></label>
+        </div>
+
+        <div class="action-area">
+          <button class="primary-button" type="button" id="processButton" disabled>
+            <span class="button-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg></span>
+            <span id="buttonLabel">Pilih foto untuk memulai</span>
+            <span class="button-arrow">→</span>
+          </button>
+          <p class="privacy-note"><svg viewBox="0 0 20 20"><rect x="4" y="8" width="12" height="9" rx="2"/><path d="M7 8V6a3 3 0 0 1 6 0v2"/></svg> Privasi terjaga. Semua pemrosesan dilakukan secara lokal di browser.</p>
+        </div>
+      </section>
+
+      <section class="progress-card hidden" id="progressCard" aria-live="polite">
+        <div class="progress-top"><div><div class="step-label">PROCESSING</div><h2 id="progressTitle">Memproses foto...</h2></div><strong id="progressPercent">0%</strong></div>
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-meta"><span id="progressCount">0 dari 0 foto</span><span id="progressStatus">Menyiapkan...</span></div>
+        <div class="current-file" id="currentFile"></div>
+      </section>
+
+      <section class="result-card hidden" id="resultCard" aria-live="polite">
+        <div class="result-symbol"><svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg></div>
+        <div class="step-label">PROCESS COMPLETED</div>
+        <h2>Foto siap diunduh.</h2>
+        <p id="resultSummary">Hasil GeoTag berhasil dibuat.</p>
+        <button class="download-button" type="button" id="downloadAgain"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M5 17v3h14v-3"/></svg> Unduh ZIP lagi</button>
+        <div class="result-details" id="resultDetails"></div>
+      </section>
+
+      <footer class="footer"><div class="footer-meta"><span>GEOTAG STUDIO</span><span>LOCAL · PRIVATE · SIMPLE</span></div><div class="copyright">© 2026 Satrio Utomo. All rights reserved.</div></footer>
+    </main>
+  </div>
+
+  <script src="lib/jszip.min.js"></script>
+  <script src="exif-gps.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
