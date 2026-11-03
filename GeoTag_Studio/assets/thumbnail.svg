@@ -1,34 +1,50 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="title desc">
-  <title id="title">GeoTag Studio</title>
-  <desc id="desc">Photo metadata utility with GPS pin and batch photo cards.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" fill="none">
   <defs>
-    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#102039"/><stop offset="1" stop-color="#0b1422"/></linearGradient>
-    <linearGradient id="mint" x2="1" y2="1"><stop stop-color="#8bf0cf"/><stop offset="1" stop-color="#39b995"/></linearGradient>
-    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000" flood-opacity=".25"/></filter>
+    <linearGradient id="bg" x1="80" y1="40" x2="1100" y2="640" gradientUnits="userSpaceOnUse"><stop stop-color="#172b40"/><stop offset="1" stop-color="#0b1421"/></linearGradient>
+    <linearGradient id="mint" x1="710" y1="140" x2="1050" y2="515" gradientUnits="userSpaceOnUse"><stop stop-color="#91f0d1"/><stop offset="1" stop-color="#39bd9c"/></linearGradient>
+    <filter id="shadow" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="16"/></filter>
   </defs>
-  <rect width="1200" height="800" rx="48" fill="url(#bg)"/>
-  <circle cx="1010" cy="110" r="260" fill="#284563" opacity=".18"/>
-  <circle cx="115" cy="720" r="260" fill="#39b995" opacity=".08"/>
-  <g filter="url(#shadow)">
-    <rect x="110" y="125" width="980" height="550" rx="30" fill="#17263a" stroke="#314962" stroke-width="3"/>
-    <rect x="110" y="125" width="980" height="82" rx="30" fill="#1c2d43"/>
-    <path d="M110 177v30h980v-30" fill="#1c2d43"/>
-    <circle cx="160" cy="166" r="9" fill="#69ddba"/><circle cx="192" cy="166" r="9" fill="#6e879f"/><circle cx="224" cy="166" r="9" fill="#6e879f"/>
-    <rect x="155" y="255" width="390" height="300" rx="22" fill="#21364c" stroke="#36536d" stroke-width="2"/>
-    <rect x="184" y="284" width="332" height="240" rx="15" fill="#2a455b"/>
-    <path d="M190 475 280 378l67 69 47-53 116 130H190Z" fill="#477e75"/>
-    <circle cx="430" cy="345" r="26" fill="#f0c78a"/>
-    <path d="M350 284c-47 0-85 38-85 85 0 72 85 140 85 140s85-68 85-140c0-47-38-85-85-85Z" fill="url(#mint)" stroke="#b4ffe7" stroke-width="6"/>
-    <circle cx="350" cy="368" r="27" fill="#102b35"/><circle cx="350" cy="368" r="11" fill="#eafff7"/>
-    <rect x="602" y="264" width="430" height="84" rx="15" fill="#102033" stroke="#304b63"/>
-    <text x="632" y="297" fill="#8ba2b9" font-family="Arial,sans-serif" font-size="18" letter-spacing="3">GPS COORDINATES</text>
-    <text x="632" y="328" fill="#eff8f5" font-family="Arial,sans-serif" font-size="26" font-weight="700">-7.257500, 112.752100</text>
-    <rect x="602" y="374" width="430" height="75" rx="15" fill="#102033" stroke="#304b63"/>
-    <text x="632" y="405" fill="#8ba2b9" font-family="Arial,sans-serif" font-size="17">SELECTED PHOTOS</text>
-    <text x="632" y="431" fill="#eff8f5" font-family="Arial,sans-serif" font-size="23" font-weight="700">128 JPG · 246 MB</text>
-    <rect x="602" y="475" width="430" height="67" rx="15" fill="url(#mint)"/>
-    <text x="817" y="518" text-anchor="middle" fill="#0a3027" font-family="Arial,sans-serif" font-size="22" font-weight="700">Add GPS & Export ZIP</text>
-    <text x="155" y="620" fill="#91a9bd" font-family="Arial,sans-serif" font-size="16" letter-spacing="2">LOCAL PROCESSING · EXIF GPS · BATCH PHOTOS</text>
+  <rect width="1200" height="675" rx="32" fill="url(#bg)"/>
+  <circle cx="925" cy="320" r="210" fill="#69ddba" opacity=".08"/>
+  <circle cx="925" cy="320" r="152" fill="#69ddba" opacity=".06"/>
+  <g opacity=".15" stroke="#7b91a9"><path d="M0 540H1200M0 590H1200M0 640H1200M80 0V675M140 0V675M200 0V675"/></g>
+  <g transform="translate(90 102)">
+    <rect width="75" height="75" rx="21" fill="#69ddba" fill-opacity=".13" stroke="#69ddba" stroke-opacity=".38"/>
+    <path d="M37.5 59S56 43 56 26a18.5 18.5 0 1 0-37 0c0 17 18.5 33 18.5 33Z" stroke="#69ddba" stroke-width="4" stroke-linejoin="round"/>
+    <circle cx="37.5" cy="26" r="6" stroke="#69ddba" stroke-width="4"/>
+    <text x="98" y="32" fill="#e9f3f8" font-family="Arial,sans-serif" font-size="25" font-weight="700" letter-spacing="3">GEOTAG <tspan fill="#69ddba">STUDIO</tspan></text>
+    <text x="0" y="167" fill="#f2f7fa" font-family="Arial,sans-serif" font-size="56" font-weight="700">Put a place</text>
+    <text x="0" y="229" fill="#69ddba" font-family="Arial,sans-serif" font-size="56" font-weight="700">on every photo.</text>
+    <text x="2" y="282" fill="#a8b9c9" font-family="Arial,sans-serif" font-size="22">Batch GPS EXIF · Excel mapping · Private processing</text>
+    <g transform="translate(0 335)">
+      <rect width="174" height="48" rx="24" fill="#69ddba" fill-opacity=".12" stroke="#69ddba" stroke-opacity=".35"/>
+      <text x="87" y="30" text-anchor="middle" fill="#a4f3d9" font-family="Arial,sans-serif" font-size="17" font-weight="700">SINGLE MODE</text>
+      <rect x="190" width="174" height="48" rx="24" fill="#69ddba" fill-opacity=".12" stroke="#69ddba" stroke-opacity=".35"/>
+      <text x="277" y="30" text-anchor="middle" fill="#a4f3d9" font-family="Arial,sans-serif" font-size="17" font-weight="700">BATCH EXCEL</text>
+    </g>
   </g>
-  <text x="110" y="744" fill="#eaf6f2" font-family="Arial,sans-serif" font-size="34" font-weight="700">GEOTAG STUDIO</text>
+  <g transform="translate(745 94)">
+    <rect x="35" y="35" width="310" height="420" rx="27" fill="#050b13" opacity=".4" filter="url(#shadow)"/>
+    <rect x="0" y="0" width="360" height="456" rx="28" fill="#15283a" stroke="#3a5368" stroke-width="2"/>
+    <rect x="24" y="25" width="312" height="64" rx="14" fill="#0e1d2c"/>
+    <circle cx="54" cy="57" r="14" fill="#69ddba" fill-opacity=".18"/>
+    <path d="M54 69s9-7.3 9-14a9 9 0 1 0-18 0c0 6.7 9 14 9 14Z" stroke="#69ddba" stroke-width="2"/><circle cx="54" cy="55" r="3" stroke="#69ddba" stroke-width="2"/>
+    <text x="80" y="53" fill="#f2f7fa" font-family="Arial,sans-serif" font-size="17" font-weight="700">Batch GPS EXIF</text>
+    <text x="80" y="72" fill="#879db1" font-family="Arial,sans-serif" font-size="10" letter-spacing="1.5">EXCEL COORDINATE MATCH</text>
+    <rect x="24" y="111" width="312" height="72" rx="13" fill="#102032" stroke="#30495e"/>
+    <rect x="42" y="128" width="38" height="38" rx="8" fill="#234154"/><text x="61" y="152" text-anchor="middle" fill="#8de8ca" font-family="Arial,sans-serif" font-size="12" font-weight="700">XLSX</text>
+    <text x="95" y="143" fill="#e6f0f6" font-family="Arial,sans-serif" font-size="14" font-weight="700">Template koordinat</text>
+    <text x="95" y="161" fill="#8298ad" font-family="Arial,sans-serif" font-size="11">2 folder · 2 titik GPS</text>
+    <g transform="translate(24 201)">
+      <rect width="312" height="118" rx="12" fill="#0f1c2b" stroke="#30495e"/>
+      <path d="M0 39H312M0 78H312" stroke="#2b4256"/>
+      <text x="17" y="25" fill="#7f96aa" font-family="Arial,sans-serif" font-size="10" font-weight="700">FOLDER</text><text x="102" y="25" fill="#7f96aa" font-family="Arial,sans-serif" font-size="10" font-weight="700">LATITUDE</text><text x="222" y="25" fill="#7f96aa" font-family="Arial,sans-serif" font-size="10" font-weight="700">LONGITUDE</text>
+      <text x="22" y="64" fill="#e5f0f7" font-family="Arial,sans-serif" font-size="13">1</text><text x="102" y="64" fill="#e5f0f7" font-family="Arial,sans-serif" font-size="12">-7.2575</text><text x="222" y="64" fill="#e5f0f7" font-family="Arial,sans-serif" font-size="12">112.7521</text>
+      <text x="22" y="103" fill="#e5f0f7" font-family="Arial,sans-serif" font-size="13">2</text><text x="102" y="103" fill="#e5f0f7" font-family="Arial,sans-serif" font-size="12">-7.2756</text><text x="222" y="103" fill="#e5f0f7" font-family="Arial,sans-serif" font-size="12">112.6426</text>
+    </g>
+    <rect x="24" y="338" width="312" height="48" rx="10" fill="url(#mint)"/>
+    <path d="m139 361 8 8 16-18" stroke="#08251f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="178" y="368" text-anchor="middle" fill="#08251f" font-family="Arial,sans-serif" font-size="15" font-weight="700">GPS READY</text>
+    <text x="180" y="421" text-anchor="middle" fill="#8da2b5" font-family="Arial,sans-serif" font-size="11">LOCAL PROCESSING · PRIVATE</text>
+  </g>
 </svg>

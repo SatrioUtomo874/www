@@ -1,88 +1,78 @@
 # GeoTag Studio
 
-**GeoTag Studio** menambahkan koordinat GPS (WGS-84) ke metadata EXIF banyak foto JPEG/JPG sekaligus. Aplikasi berjalan lokal di browser: foto tidak dikirim ke server. Hasilnya diunduh sebagai ZIP, sedangkan file asli pada perangkat tidak diubah.
+**GeoTag Studio** menambahkan metadata koordinat GPS (EXIF) ke foto JPG/JPEG. Aplikasi menyediakan dua alur: satu koordinat untuk semua foto, atau pemetaan koordinat dari Excel untuk folder foto bernomor.
 
 ## Fitur
 
-- Memilih satu folder beserta subfolder, memilih beberapa foto secara individual, atau drag-and-drop foto.
-- Memasukkan latitude dan longitude dalam derajat desimal.
-- Mengambil koordinat perangkat saat ini secara opsional melalui izin geolocation browser. Posisi perangkat saat ini belum tentu sama dengan tempat foto diambil; periksa kembali koordinat sebelum memproses.
-- Menambahkan atau memperbarui GPS IFD pada metadata EXIF JPEG tanpa mengode ulang aliran gambar JPEG.
-- Mempertahankan struktur subfolder saat folder dipilih.
-- Menyimpan foto yang gagal diproses sebagai file asli di ZIP dan mencatat statusnya di `laporan_geotag.csv`.
-- Menghindari tabrakan nama file dalam ZIP dengan menambahkan akhiran `(2)`, `(3)`, dan seterusnya.
-- Menyediakan progres, ringkasan hasil, unduh ulang ZIP, dan tautan untuk melihat koordinat di peta.
+- **Mode Satuan:** satu pasangan latitude/longitude diterapkan ke semua foto JPG/JPEG yang dipilih.
+- **Mode Batch:** membaca koordinat dari kolom B dan C file `.xlsx`, lalu memasangkannya ke subfolder bernomor `1`, `2`, `3`, dan seterusnya.
+- Pratinjau jumlah folder, foto, koordinat, dan status pencocokan sebelum pemrosesan.
+- Deteksi kemungkinan titik desimal yang diubah Excel, dengan pemulihan manual dan persetujuan pengguna.
+- Hasil berupa ZIP, mempertahankan struktur subfolder foto, serta laporan CSV.
+- Foto sumber tidak ditimpa; foto yang gagal diberi GPS tetap disertakan sebagai file asli jika dapat dibaca.
+- Seluruh pemrosesan dilakukan di browser. Foto dan workbook tidak diunggah ke server.
 
-## Cara menggunakan
+## Menjalankan di Toolspace
 
-1. Buka GeoTag Studio melalui URL Toolspace atau buka `index.html` dengan browser modern.
-2. Pilih **Pilih folder** untuk mengambil semua foto dari folder/subfolder, atau **Pilih beberapa foto** untuk memilih file satu per satu. Drag-and-drop juga tersedia.
-3. Masukkan latitude dan longitude. Koordinat bisa disalin dari Google Maps. Tombol **Gunakan lokasi perangkat** bersifat opsional dan meminta izin browser.
-4. Periksa koordinat yang ditampilkan. Nilai yang sama akan diterapkan pada semua foto dalam batch.
-5. Atur nama ZIP, lalu tekan **Proses foto & unduh ZIP**.
-6. Ekstrak ZIP hasilnya. Periksa `laporan_geotag.csv` untuk mengetahui foto yang berhasil, gagal, atau diabaikan.
+Folder ini dirancang untuk diletakkan langsung di root repository Toolspace dengan nama persis `GeoTag_Studio/`. Kartu katalog dibaca otomatis dari metadata `toolspace:*` di `index.html`; tidak perlu mengedit katalog utama secara manual.
 
-## Format dan batasan
+Path publik setelah deploy: `/GeoTag_Studio/`
 
-- Input yang diproses: JPEG/JPG (`.jpg`, `.jpeg`). PNG, HEIC/HEIF, WebP, RAW, dan format lain belum didukung.
-- Koordinat harus berupa angka desimal: latitude `-90` sampai `90`, longitude `-180` sampai `180`.
-- Tool menulis metadata GPS saja. Tool tidak mengubah tanggal/waktu pengambilan foto, alamat, nama lokasi, altitude, atau arah kamera.
-- Jika foto sudah memiliki EXIF, data EXIF lama dipertahankan sejauh struktur TIFF/EXIF dapat dibaca; GPS IFD ditambahkan atau diperbarui. Foto dengan EXIF rusak/terlalu besar dapat gagal dan akan disertakan dalam ZIP sebagai file asli.
-- Foto yang gagal tidak diberi metadata GPS. Status dan alasan dicatat di CSV.
-- ZIP menggunakan penyimpanan tanpa kompresi ulang untuk menghindari pemborosan waktu CPU; ukuran ZIP biasanya mendekati total ukuran foto sumber ditambah metadata/laporan.
-- Batch sangat besar dapat membutuhkan RAM besar karena ZIP dibangun di browser. Untuk perangkat dengan memori terbatas, proses foto dalam beberapa batch.
-- Pemilihan folder (`webkitdirectory`) paling konsisten pada Chrome/Edge desktop. Pilih beberapa foto sebagai alternatif pada browser yang tidak mendukung pemilihan folder.
-- Geolocation browser memerlukan HTTPS atau localhost dan izin eksplisit. Akurasi posisi dipengaruhi perangkat, jaringan, dan lingkungan.
+## Penggunaan — Mode Satuan
 
-## Privasi
+1. Pilih **Mode Satuan**.
+2. Pilih folder foto atau tarik foto JPG/JPEG ke area pemilihan.
+3. Masukkan latitude dan longitude dalam derajat desimal.
+4. Gunakan titik (`.`) sebagai pemisah desimal, misalnya `-7.257500` dan `112.752100`.
+5. Proses dan unduh ZIP hasilnya.
 
-- Foto diproses di browser dan tidak diunggah ke server GeoTag Studio.
-- Izin lokasi hanya diminta setelah pengguna menekan tombol lokasi perangkat.
-- **Peringatan:** koordinat yang ditambahkan menjadi metadata GPS di dalam foto hasil. Orang lain dapat membaca metadata lokasi setelah file dibagikan. Jangan menambahkan lokasi sensitif jika tidak ingin membagikannya.
-- Jangan mengandalkan geolocation perangkat untuk menentukan lokasi historis foto. Gunakan koordinat tempat foto benar-benar diambil.
+## Penggunaan — Mode Batch
 
-## Struktur project
+1. Pilih **Mode Batch**.
+2. Unduh template Excel atau siapkan file `.xlsx` sendiri.
+3. Isi latitude pada kolom B dan longitude pada kolom C mulai baris 2. Baris 2 dipasangkan dengan folder `1`, baris 3 dengan folder `2`, dan seterusnya.
+4. Pilih folder induk foto. Di dalamnya harus ada subfolder dengan nama angka, misalnya `1`, `2`, `3`. Foto di dalam subfolder lebih dalam juga dibaca.
+5. Periksa tabel pratinjau pencocokan. Folder yang nomornya melebihi data koordinat terakhir di Excel akan diabaikan.
+6. Bila aplikasi mendeteksi koordinat yang mungkin kehilangan titik desimal, pilih susunan titik yang benar, cocokkan kembali dengan sumber koordinat, lalu centang persetujuan.
+7. Jalankan pemrosesan dan unduh ZIP hasil beserta `laporan_batch_geotag.csv`.
+
+## Format koordinat dan pemulihan Excel
+
+- Latitude harus berada pada rentang `-90` sampai `90`. Longitude harus berada pada rentang `-180` sampai `180`.
+- Gunakan titik (`.`), bukan koma, sebagai pemisah desimal.
+- Template mengatur koordinat sebagai teks agar titik desimal tidak berubah karena pengaturan regional Excel.
+- Jika Excel menghapus titik atau mengubahnya menjadi pemisah ribuan, GeoTag Studio menawarkan kandidat pemulihan. Aplikasi tidak otomatis menebak lalu menerapkan koordinat tersebut.
+- Pemulihan hanya menyusun kembali kemungkinan posisi titik. Excel dapat membulatkan angka panjang sehingga digit yang hilang tidak selalu dapat dikembalikan. Selalu cocokkan hasil dengan sumber koordinat asli.
+
+## Struktur folder foto untuk Mode Batch
 
 ```text
-GeoTag_Studio/
-├── index.html
-├── style.css
-├── app.js
-├── exif-gps.js
-├── README.md
-├── assets/
-│   ├── favicon.svg
-│   └── thumbnail.svg
-├── lib/
-│   ├── jszip.min.js
-│   └── JSZIP-LICENSE.txt
-└── tests/
-    └── geotag-core.test.cjs
+Album_Foto_Bebas/
+├── 1/
+│   ├── foto-a.jpg
+│   └── subfolder/foto-b.jpeg
+├── 2/
+│   └── foto-c.jpg
+└── 3/
+    └── foto-d.jpg
 ```
 
-## Menjalankan test
+Nama folder induk bebas. Nama subfolder tingkat pertama harus berupa angka positif. Hanya JPG/JPEG yang diproses; foto di luar subfolder bernomor tidak ikut diproses.
 
-Memerlukan Node.js 18 atau lebih baru. Dari folder `GeoTag_Studio`:
+## Privasi dan batasan
 
-```bash
-node --check app.js
-node --check exif-gps.js
-node --test tests/geotag-core.test.cjs
-```
+- Pemrosesan dilakukan lokal di browser menggunakan JavaScript dan JSZip.
+- Tool ini hanya menerima JPG/JPEG dan file Excel `.xlsx` untuk Mode Batch. Format `.xls`, HEIC, PNG, dan RAW tidak didukung.
+- Koordinat ditulis ke metadata GPS EXIF. Aplikasi tidak menentukan lokasi foto secara otomatis.
+- File hasil mengandung metadata lokasi yang dapat dibaca oleh aplikasi foto atau penerima file. Pastikan koordinat yang digunakan memang boleh dibagikan.
+- Pemulihan koordinat Excel harus diverifikasi pengguna; hasil yang salah dapat menempelkan lokasi yang salah pada foto.
 
-Test mencakup penambahan GPS WGS-84 ke JPEG tanpa EXIF, memperbarui koordinat yang sudah ada, mempertahankan segmen non-EXIF/data gambar, menolak JPEG invalid, dan validasi rentang koordinat.
+## Bahan contoh
 
-## Deploy ke Toolspace
+Di aplikasi tersedia template Excel, contoh pengisian, dan paket contoh Mode Batch. Foto contoh memakai ilustrasi logo HTML dan hanya digunakan untuk menguji alur, bukan sebagai foto lokasi sebenarnya.
 
-1. Ekstrak ZIP project.
-2. Upload folder `GeoTag_Studio` ke root repository `SatrioUtomo874/toolspace-dashboard`, sejajar dengan folder tools lain.
-3. Pastikan file `GeoTag_Studio/index.html` berada tepat di lokasi tersebut, bukan di `GeoTag_Studio/GeoTag_Studio/index.html`.
-4. Commit ke branch `main` dan tunggu build/deploy Cloudflare selesai.
-5. Generator Toolspace membaca metadata `toolspace:*` dari `index.html`. Kartu akan memakai URL `/GeoTag_Studio/` dan thumbnail `assets/thumbnail.svg`.
+## Lisensi dependency
 
-Metadata katalog ada di bagian `<head>` `index.html`. Tool disetel sebagai `ready` agar kartunya dapat dibuka, dengan label publik **Beta · siap diuji**. Ganti label/status hanya setelah alur pemrosesan benar-benar diuji di browser setelah deployment.
+Library JSZip 3.10.1 disertakan pada `lib/jszip.min.js`. Informasi lisensinya ada di `lib/JSZIP-LICENSE.txt`.
 
-## Library pihak ketiga
-
-- JSZip 3.10.1 disertakan lokal di `lib/jszip.min.js` untuk membuat ZIP. Lisensinya disertakan di `lib/JSZIP-LICENSE.txt`.
-- Penulis EXIF GPS minimal berada di `exif-gps.js`; tidak menggunakan API eksternal.
+© 2026 Satrio Utomo. All rights reserved.
