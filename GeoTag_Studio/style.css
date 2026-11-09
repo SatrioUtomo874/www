@@ -76,3 +76,16 @@
 .recovery-note{margin-top:11px;color:#9e8e73}
 .mapping-status.recovered{background:rgba(105,221,186,.12);color:#8fe6c9}
 @media(max-width:600px){.recovery-settings{grid-template-columns:1fr}.recovery-preview-row{grid-template-columns:32px minmax(0,1fr) minmax(0,1fr);gap:5px}.recovery-preview-row code{font-size:8px}}
+
+.batch-part-downloads{margin-top:16px;padding:14px;border:1px solid #2b4054;border-radius:11px;background:rgba(9,20,33,.32);text-align:left}
+.batch-download-intro,.batch-download-status,.batch-download-done{font-size:10px;line-height:1.65;color:#9aabbd;margin:0 0 11px}
+.batch-download-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-radius:9px;background:rgba(255,255,255,.035);border:1px solid rgba(99,121,146,.2)}
+.batch-download-copy{display:flex;flex-direction:column;gap:5px;min-width:0}
+.batch-download-copy strong{font-size:11px;color:#e9f2f8}
+.batch-download-copy span{font-size:9px;color:#91a4b8}
+.batch-download-link{width:auto;max-width:52%;height:auto;min-height:38px;padding:9px 12px;text-align:center;text-decoration:none;font-size:10px;overflow-wrap:anywhere}
+.batch-download-status{margin:11px 0 0}
+.batch-next-button{margin:12px auto 0;max-width:300px;font-size:10px}
+.batch-next-button:disabled{cursor:not-allowed;background:#314657;color:#8194a6;transform:none;box-shadow:none}
+.batch-saved-list{padding-left:18px;margin:8px 0 0;color:#bdcbd8;font-size:10px;line-height:1.9;overflow-wrap:anywhere}
+@media(max-width:600px){.batch-download-item{align-items:stretch;flex-direction:column}.batch-download-link{max-width:none;width:100%}}

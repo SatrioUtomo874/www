@@ -9,8 +9,11 @@
     batchExcelName: '', batchCoordinates: new Map(), batchMaxFolder: 0,
     batchGroups: new Map(), batchFolderLabel: '', batchPhotoCount: 0,
     batchUnsortedCount: 0, batchExcelError: '', batchExcelLoading: false,
-    batchRecoveryApplied: false, batchRecoveryConfirmed: false
+    batchRecoveryApplied: false, batchRecoveryConfirmed: false, batchExportSession: null
   };
+
+  // Keep each archive comfortably below typical browser-memory pressure.
+  const BATCH_ZIP_TARGET_BYTES = 80 * 1024 * 1024;
 
   const folderInput = $('folderInput');
   const dropzone = $('dropzone');
@@ -27,6 +30,23 @@
 
   function safeZipPath(path) {
     return String(path || 'foto.jpg').replace(/\\/g, '/').split('/').filter(part => part && part !== '.' && part !== '..').join('/');
+  }
+
+  function cleanFolderLabel(value) {
+    return String(value || '')
+      .normalize('NFC')
+      .replace(/[<>:\"/\\|?*\u0000-\u001F]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/[. ]+$/g, '')
+      .trim()
+      .slice(0, 80);
+  }
+
+  function batchOutputRelativePath(relative, folderNo, folderLabel) {
+    const segments = safeZipPath(relative).split('/').filter(Boolean);
+    const label = cleanFolderLabel(folderLabel);
+    const outputFolder = label ? `${folderNo}. ${label}` : String(folderNo);
+    return [outputFolder, ...segments.slice(1)].join('/');
   }
 
   function cleanZipName(raw, fallback) {
@@ -96,6 +116,7 @@
     $('batchModePanel').classList.toggle('hidden', mode !== 'batch');
     $('resultCard').classList.add('hidden');
     $('progressCard').classList.add('hidden');
+    resetBatchPartDownloads();
     validateReady();
   }
 
@@ -331,8 +352,356 @@
   function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // Keep the object URL alive long enough for large downloads to start and finish.
+    setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
+  }
+
+  async function prepareZipOutput(filename) {
+    // On Chromium browsers, stream the ZIP straight to disk instead of building
+    // one giant Blob in RAM. This API must be invoked from the user's click.
+    if (window.isSecureContext && typeof window.showSaveFilePicker === 'function') {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }]
+        });
+        return { fileHandle: handle, cancelled: false };
+      } catch (error) {
+        if (error && error.name === 'AbortError') return { writable: null, cancelled: true };
+        // Unsupported/blocked file access falls back to a normal browser download.
+        console.warn('Direct ZIP saving is unavailable; using browser download.', error);
+      }
+    }
+    return { fileHandle: null, cancelled: false };
+  }
+
+  function streamZipToWritable(zip, writable) {
+    return new Promise((resolve, reject) => {
+      const stream = zip.generateInternalStream({
+        type: 'uint8array',
+        compression: 'STORE',
+        streamFiles: true
+      });
+      let writeQueue = Promise.resolve();
+      let bytesWritten = 0;
+      let settled = false;
+
+      const fail = async (error) => {
+        if (settled) return;
+        settled = true;
+        try {
+          if (typeof writable.abort === 'function') await writable.abort(error);
+        } catch (_) { /* preserve the original error */ }
+        reject(error);
+      };
+
+      stream.on('data', (chunk, metadata) => {
+        if (settled) return;
+        stream.pause();
+        writeQueue = writeQueue.then(async () => {
+          await writable.write(chunk);
+          bytesWritten += chunk.byteLength || chunk.length || 0;
+          const percent = Math.round((metadata && metadata.percent) || 0);
+          $('progressStatus').textContent = `Menyimpan ZIP ${percent}%`;
+          if (metadata && metadata.currentFile) {
+            $('currentFile').textContent = `Mengemas ${metadata.currentFile}`;
+          }
+        }).then(() => {
+          if (!settled) stream.resume();
+        }).catch(fail);
+      });
+
+      stream.on('error', fail);
+      stream.on('end', () => {
+        writeQueue.then(async () => {
+          if (settled) return;
+          await writable.close();
+          settled = true;
+          resolve(bytesWritten);
+        }).catch(fail);
+      });
+      stream.resume();
+    });
+  }
+
+  async function exportZip(zip, filename, target) {
+    if (target && target.fileHandle) {
+      let writable = null;
+      try {
+        // Create/truncate the destination only after photo processing has succeeded.
+        writable = await target.fileHandle.createWritable();
+      } catch (error) {
+        console.warn('Could not open the selected destination; using browser download.', error);
+      }
+      if (writable) {
+        const size = await streamZipToWritable(zip, writable);
+        return { blob: null, size, savedDirectly: true };
+      }
+    }
+    const blob = await zip.generateAsync(
+      { type: 'blob', compression: 'STORE', streamFiles: true },
+      meta => {
+        $('progressStatus').textContent = `Membuat ZIP ${Math.round(meta.percent || 0)}%`;
+      }
+    );
+    return { blob, size: blob.size, savedDirectly: false };
+  }
+
+  async function chooseBatchOutputDirectory() {
+    if (!window.isSecureContext || typeof window.showDirectoryPicker !== 'function') {
+      return { directoryHandle: null, cancelled: false };
+    }
+    try {
+      const directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      return { directoryHandle, cancelled: false };
+    } catch (error) {
+      if (error && error.name === 'AbortError') return { directoryHandle: null, cancelled: true };
+      console.warn('Direct folder saving is unavailable; using one-by-one ZIP downloads.', error);
+      return { directoryHandle: null, cancelled: false };
+    }
+  }
+
+  function splitBatchIntoParts(eligibleGroups) {
+    // Keep each numbered source folder intact. A folder is never split across ZIPs,
+    // even when its total size is larger than the target; oversized folders get
+    // their own ZIP so extracting all parts never creates duplicate folder trees.
+    const parts = [];
+    let current = { items: [], bytes: 0, folderNumbers: [] };
+
+    for (const folderNo of eligibleGroups) {
+      const coord = state.batchCoordinates.get(folderNo);
+      const files = state.batchGroups.get(folderNo) || [];
+      if (!files.length) continue;
+
+      const folderBytes = files.reduce((sum, entry) => sum + (Number(entry.file.size) || 0), 0);
+      if (current.items.length && current.bytes + folderBytes > BATCH_ZIP_TARGET_BYTES) {
+        parts.push(current);
+        current = { items: [], bytes: 0, folderNumbers: [] };
+      }
+
+      current.folderNumbers.push(folderNo);
+      for (const entry of files) current.items.push({ folderNo, entry, coord });
+      current.bytes += folderBytes;
+
+      // If this folder alone reaches/exceeds the target, close this ZIP now.
+      // In particular, do not split its photos into separate ZIP archives.
+      if (current.bytes >= BATCH_ZIP_TARGET_BYTES) {
+        parts.push(current);
+        current = { items: [], bytes: 0, folderNumbers: [] };
+      }
+    }
+
+    if (current.items.length) parts.push(current);
+    return parts;
+  }
+
+  function batchPartFilename(baseFilename, partIndex, totalParts) {
+    const base = String(baseFilename || 'hasil_geotag_batch').replace(/\.zip$/i, '');
+    const digits = String(totalParts).length;
+    return `${base}_bagian_${String(partIndex + 1).padStart(digits, '0')}_dari_${String(totalParts).padStart(digits, '0')}.zip`;
+  }
+
+  async function buildBatchZipPart(part, partIndex, totalParts, progressState, ignoredRows) {
+    const zip = new JSZip();
+    const report = [['nomor_folder','nama_file','status','latitude','longitude','ukuran_asli','pesan']];
+    const partNumber = partIndex + 1;
+    let success = 0, failed = 0, skipped = 0, unreadable = 0;
+
+    for (const { folderNo, entry, coord } of part.items) {
+      const { file, relative } = entry;
+      const folderLabel = cleanFolderLabel(coord?.folderName) || cleanFolderLabel(entry.sourceFolderLabel);
+      const outputRelative = batchOutputRelativePath(relative, folderNo, folderLabel);
+      $('currentFile').textContent = `ZIP ${partNumber}/${totalParts} · ${outputRelative}`;
+      let sourceReadable = false;
+      try {
+        if (!coord || !coord.valid) {
+          zip.file(outputRelative, file, { date: file.lastModified ? new Date(file.lastModified) : new Date() });
+          skipped++;
+          report.push([folderNo, outputRelative, 'TANPA GPS', coord?.rawLat || '', coord?.rawLon || '', file.size, coord?.reason || 'Baris koordinat untuk folder ini kosong']);
+        } else {
+          const originalBytes = new Uint8Array(await file.arrayBuffer());
+          sourceReadable = true;
+          const tagged = writeExifGps(originalBytes, coord.lat, coord.lon);
+          zip.file(outputRelative, new Blob([tagged], { type: 'image/jpeg' }), { date: file.lastModified ? new Date(file.lastModified) : new Date() });
+          success++;
+          report.push([folderNo, outputRelative, 'BERHASIL', coord.lat.toFixed(6), coord.lon.toFixed(6), file.size, coord.recovered ? 'GPS EXIF berhasil ditambahkan menggunakan koordinat hasil pemulihan desimal yang disetujui pengguna' : 'GPS EXIF berhasil ditambahkan']);
+        }
+      } catch (error) {
+        if (sourceReadable) {
+          failed++;
+          zip.file(outputRelative, file, { date: file.lastModified ? new Date(file.lastModified) : new Date() });
+          report.push([folderNo, outputRelative, 'GAGAL', coord?.lat ?? coord?.rawLat ?? '', coord?.lon ?? coord?.rawLon ?? '', file.size, String(error && error.message ? error.message : error)]);
+        } else {
+          unreadable++;
+          report.push([folderNo, outputRelative, 'GAGAL BACA', coord?.rawLat || '', coord?.rawLon || '', file.size, String(error && error.message ? error.message : error)]);
+        }
+      }
+      progressState.done++;
+      const photoPercent = Math.min(95, Math.round(progressState.done / progressState.total * 95));
+      $('progressPercent').textContent = `${photoPercent}%`;
+      $('progressFill').style.width = `${photoPercent}%`;
+      $('progressCount').textContent = `${progressState.done} dari ${progressState.total} foto`;
+      $('progressStatus').textContent = `Memproses foto · ZIP ${partNumber}/${totalParts}`;
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    if (partIndex === 0 && ignoredRows.length) report.push(...ignoredRows);
+    report.push([]);
+    const folderList = (part.folderNumbers || []).join(', ');
+    report.push(['Ringkasan bagian','','','','','',`Bagian ${partNumber} dari ${totalParts}; folder utuh: ${folderList}; foto dalam bagian: ${part.items.length}; ukuran sumber: ${part.bytes}`]);
+    report.push(['Ringkasan hasil','','','','','',`Berhasil: ${success}; gagal: ${failed}; tanpa GPS: ${skipped}; tidak dapat dibaca: ${unreadable}`]);
+    report.push(['Catatan','','','','','','Setiap folder nomor dimasukkan utuh ke satu ZIP dan tidak dipecah ke arsip lain. Nama folder keluaran dapat memakai format nomor + titik + nama folder. Ekstrak seluruh ZIP ke folder tujuan yang sama untuk mendapatkan kembali struktur folder.']);
+    zip.file(`laporan_batch_geotag_bagian_${String(partNumber).padStart(2, '0')}.csv`, csvText(report));
+    zip.file(`INFO_BAGIAN_${String(partNumber).padStart(2, '0')}.txt`, `GeoTag Studio — Hasil Batch\nBagian: ${partNumber} dari ${totalParts}\nFolder utuh di ZIP ini: ${folderList}\nFoto dalam bagian: ${part.items.length}\nUkuran foto sumber bagian: ${formatBytes(part.bytes)}\n\nSetiap folder sumber disimpan utuh di satu ZIP; tidak ada folder yang dipotong ke ZIP lain. Ekstrak seluruh ZIP ke folder tujuan yang sama untuk mengembalikan struktur folder bernomor.\nLaporan CSV untuk bagian ini disertakan di dalam ZIP.\n`);
+    return { zip, stats: { success, failed, skipped, unreadable, count: part.items.length } };
+  }
+
+  async function saveZipToDirectory(zip, filename, directoryHandle) {
+    const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    return streamZipToWritable(zip, writable);
+  }
+
+  function resetBatchPartDownloads() {
+    const container = $('batchPartDownloads');
+    if (container) {
+      container.innerHTML = '';
+      container.classList.add('hidden');
+    }
+    const old = state.batchExportSession?.currentPart;
+    if (old?.url) URL.revokeObjectURL(old.url);
+    state.batchExportSession = null;
+  }
+
+  function renderBatchFallbackDownloads(session) {
+    const container = $('batchPartDownloads');
+    container.innerHTML = '';
+    container.classList.remove('hidden');
+    const intro = document.createElement('p');
+    intro.className = 'batch-download-intro';
+    intro.textContent = `ZIP dibuat satu per satu agar browser tetap ringan. Target sekitar ${formatBytes(BATCH_ZIP_TARGET_BYTES)} per ZIP, tetapi setiap folder nomor selalu utuh dan hanya muncul di satu ZIP. Folder yang lebih besar dari target tetap disimpan utuh dalam ZIP sendiri. Unduh bagian yang sudah siap, lalu siapkan bagian berikutnya.`;
+    container.appendChild(intro);
+
+    const current = session.currentPart;
+    if (current && current.blob) {
+      const item = document.createElement('div');
+      item.className = 'batch-download-item';
+      const info = document.createElement('div');
+      info.className = 'batch-download-copy';
+      const title = document.createElement('strong');
+      title.textContent = `Bagian ${current.index + 1} dari ${session.parts.length}`;
+      const meta = document.createElement('span');
+      meta.textContent = `${current.stats.count} foto · ${formatBytes(current.size)} ZIP`;
+      info.append(title, meta);
+      const link = document.createElement('a');
+      link.className = 'download-button batch-download-link';
+      link.href = current.url;
+      link.download = current.filename;
+      link.textContent = `Unduh ${current.filename}`;
+      link.addEventListener('click', () => {
+        current.downloaded = true;
+        session.downloaded.add(current.index);
+        setTimeout(() => {
+          if (current.downloaded && current.url) {
+            URL.revokeObjectURL(current.url);
+            current.url = null;
+            current.blob = null;
+            link.removeAttribute('href');
+            link.textContent = 'Unduhan sudah dimulai';
+          }
+        }, 120000);
+        const nextButton = container.querySelector('[data-next-part]');
+        if (nextButton) nextButton.disabled = false;
+        const status = container.querySelector('.batch-download-status');
+        if (status) status.textContent = current.index + 1 < session.parts.length
+          ? 'Unduhan dimulai. Setelah selesai, siapkan bagian berikutnya.'
+          : 'Unduhan bagian terakhir dimulai.';
+        if (session.downloaded.size === session.parts.length) {
+          $('progressPercent').textContent = '100%';
+          $('progressFill').style.width = '100%';
+          $('progressStatus').textContent = 'Semua bagian sudah diunduh';
+        }
+      });
+      item.append(info, link);
+      container.appendChild(item);
+    }
+
+    const status = document.createElement('p');
+    status.className = 'batch-download-status';
+    status.textContent = `${session.downloaded.size} dari ${session.parts.length} ZIP sudah diminta untuk diunduh.`;
+    container.appendChild(status);
+
+    if (session.nextIndex < session.parts.length) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'download-button batch-next-button';
+      button.dataset.nextPart = 'true';
+      button.disabled = !current || !current.downloaded;
+      button.textContent = `Siapkan ZIP bagian ${session.nextIndex + 1} dari ${session.parts.length}`;
+      button.addEventListener('click', () => prepareFallbackBatchPart(session));
+      container.appendChild(button);
+    } else if (session.downloaded.size === session.parts.length) {
+      const done = document.createElement('p');
+      done.className = 'batch-download-done';
+      done.textContent = 'Semua bagian sudah diunduh.';
+      container.appendChild(done);
+    } else {
+      const done = document.createElement('p');
+      done.className = 'batch-download-done';
+      done.textContent = 'Bagian terakhir sudah siap. Klik Unduh ZIP di atas untuk menyelesaikan ekspor.';
+      container.appendChild(done);
+    }
+  }
+
+  async function prepareFallbackBatchPart(session) {
+    if (state.running || session.nextIndex >= session.parts.length) return;
+    if (session.currentPart && !session.currentPart.downloaded) return;
+    // Keep the previous Blob URL alive briefly so the browser can finish its download.
+    // Its two-minute cleanup timer releases it after the download has started.
+    session.currentPart = null;
+    const index = session.nextIndex;
+    const part = session.parts[index];
+    state.running = true;
+    validateReady();
+    beginProgress(`Membuat ZIP bagian ${index + 1} dari ${session.parts.length}...`, session.totalFiles);
+    updateProgress(session.progressState.done, session.totalFiles, `Menyiapkan bagian ${index + 1}/${session.parts.length}`);
+    try {
+      const built = await buildBatchZipPart(part, index, session.parts.length, session.progressState, session.ignoredRows);
+      $('progressStatus').textContent = `Membuat ZIP bagian ${index + 1}...`;
+      const blob = await built.zip.generateAsync(
+        { type: 'blob', compression: 'STORE', streamFiles: true },
+        meta => { $('progressStatus').textContent = `Membuat ZIP bagian ${index + 1}: ${Math.round(meta.percent || 0)}%`; }
+      );
+      session.stats.success += built.stats.success;
+      session.stats.failed += built.stats.failed;
+      session.stats.skipped += built.stats.skipped;
+      session.stats.unreadable += built.stats.unreadable;
+      const filename = batchPartFilename(session.baseFilename, index, session.parts.length);
+      session.currentPart = { index, blob, size: blob.size, filename, stats: built.stats, url: URL.createObjectURL(blob), downloaded: false };
+      session.nextIndex++;
+      $('progressStatus').textContent = `ZIP bagian ${index + 1} siap diunduh`;
+      const photoPercent = Math.min(95, Math.round(session.progressState.done / session.totalFiles * 95));
+      $('progressPercent').textContent = `${photoPercent}%`;
+      $('progressFill').style.width = `${photoPercent}%`;
+      $('resultTitle').textContent = `${session.totalFiles} foto dibagi menjadi ${session.parts.length} ZIP.`;
+      $('resultSummary').textContent = `${session.stats.success} foto berhasil diberi GPS pada bagian yang sudah dibuat. Setiap folder sumber utuh berada di satu ZIP; tidak ada folder yang terbagi ke beberapa arsip. Unduh bagian yang siap sebelum menyiapkan bagian berikutnya agar penggunaan memori tetap rendah.`;
+      $('downloadAgain').classList.add('hidden');
+      $('resultDetails').innerHTML = `<span><strong>${session.totalFiles}</strong> total foto</span><span><strong>${session.parts.length}</strong> file ZIP</span><span><strong>${formatBytes(BATCH_ZIP_TARGET_BYTES)}</strong> target per ZIP</span>`;
+      renderBatchFallbackDownloads(session);
+      $('resultCard').classList.remove('hidden');
+    } catch (error) {
+      alert(`Gagal membuat ZIP bagian ${index + 1}: ${error.message || error}`);
+      $('progressStatus').textContent = `Gagal membuat bagian ${index + 1}`;
+    } finally {
+      state.running = false;
+      validateReady();
+    }
   }
 
   function beginProgress(title, total) {
@@ -349,16 +718,19 @@
     $('currentFile').textContent = '';
   }
 
-  function finishResult(summary, success, failed, skipped, ignored, blob, filename) {
-    state.zipBlob = blob;
+  function finishResult(summary, success, failed, skipped, ignored, output, filename) {
+    state.zipBlob = output.blob;
     state.zipFilename = filename;
-    downloadBlob(blob, filename);
     $('progressTitle').textContent = 'Proses selesai';
-    $('progressStatus').textContent = 'ZIP berhasil dibuat';
+    $('progressStatus').textContent = output.savedDirectly ? 'ZIP berhasil disimpan' : 'ZIP berhasil dibuat';
     $('progressPercent').textContent = '100%';
     $('progressFill').style.width = '100%';
-    $('resultSummary').textContent = summary;
-    $('resultDetails').innerHTML = `<span><strong>${success}</strong> berhasil</span><span><strong>${failed}</strong> gagal</span>${skipped ? `<span><strong>${skipped}</strong> tanpa GPS</span>` : ''}${ignored ? `<span><strong>${ignored}</strong> folder diabaikan</span>` : ''}<span><strong>${formatBytes(blob.size)}</strong> ukuran ZIP</span>`;
+    $('resultTitle').textContent = output.savedDirectly ? 'ZIP berhasil disimpan.' : 'ZIP siap diunduh.';
+    $('resultSummary').textContent = output.savedDirectly
+      ? `${summary} ZIP sudah disimpan ke lokasi yang kamu pilih.`
+      : `${summary} Klik tombol di bawah untuk mengunduh ZIP.`;
+    $('downloadAgain').classList.toggle('hidden', !output.blob);
+    $('resultDetails').innerHTML = `<span><strong>${success}</strong> berhasil</span><span><strong>${failed}</strong> gagal</span>${skipped ? `<span><strong>${skipped}</strong> tanpa GPS</span>` : ''}${ignored ? `<span><strong>${ignored}</strong> folder diabaikan</span>` : ''}<span><strong>${formatBytes(output.size)}</strong> ukuran ZIP</span>`;
     $('resultCard').classList.remove('hidden');
   }
 
@@ -372,7 +744,12 @@
     if (!coords) return;
     if (typeof JSZip === 'undefined') { alert('Library ZIP tidak ditemukan. Pastikan folder lib dan file jszip.min.js tidak dipindahkan.'); return; }
 
+    const filename = cleanZipName($('zipName').value, 'hasil_geotag_foto');
+    const target = await prepareZipOutput(filename);
+    if (target.cancelled) return;
+
     beginProgress('Memproses foto...', state.files.length);
+    if (target.fileHandle) $('progressStatus').textContent = 'Menyiapkan penyimpanan ZIP langsung...';
     const zip = new JSZip();
     const report = [['nama_file','status','latitude','longitude','ukuran_asli','pesan']];
     let success = 0, failed = 0;
@@ -383,7 +760,9 @@
       try {
         const input = new Uint8Array(await file.arrayBuffer());
         const tagged = writeExifGps(input, coords.lat, coords.lon);
-        zip.file(relative, tagged, { binary: true, date: file.lastModified ? new Date(file.lastModified) : new Date() });
+        // Keep the transformed image as a Blob so JSZip can read it lazily
+        // while generating the archive, rather than retaining every byte array.
+        zip.file(relative, new Blob([tagged], { type: 'image/jpeg' }), { date: file.lastModified ? new Date(file.lastModified) : new Date() });
         success++;
         report.push([relative,'BERHASIL',coords.lat.toFixed(6),coords.lon.toFixed(6),file.size,'GPS EXIF berhasil ditambahkan']);
       } catch (error) {
@@ -396,16 +775,18 @@
     }
     report.push([]); report.push(['Ringkasan','','','','',`Foto berhasil: ${success}; gagal: ${failed}`]);
     zip.file('laporan_geotag.csv', csvText(report));
-    $('progressStatus').textContent = 'Membuat file ZIP...';
+    $('progressStatus').textContent = target.fileHandle ? 'Menyimpan file ZIP...' : 'Membuat file ZIP...';
     $('currentFile').textContent = 'Mengemas foto dan laporan...';
     try {
-      const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' }, meta => { $('progressStatus').textContent = `Mengemas ZIP ${Math.round(meta.percent || 0)}%`; });
-      const filename = cleanZipName($('zipName').value, 'hasil_geotag_foto');
-      finishResult(failed === 0 ? `${success} foto berhasil diberi metadata GPS. File ZIP sudah diunduh.` : `${success} foto berhasil diberi GPS, ${failed} foto tidak dapat diubah dan tetap disertakan sebagai file asli dalam ZIP.`, success, failed, 0, 0, blob, filename);
+      const output = await exportZip(zip, filename, target);
+      const summary = failed === 0
+        ? `${success} foto berhasil diberi metadata GPS.`
+        : `${success} foto berhasil diberi GPS, ${failed} foto tidak dapat diubah dan tetap disertakan sebagai file asli dalam ZIP.`;
+      finishResult(summary, success, failed, 0, 0, output, filename);
       $('progressCount').textContent = `${success} berhasil · ${failed} gagal`;
     } catch (error) {
-      alert('Gagal membuat ZIP: ' + (error.message || error));
-      $('progressStatus').textContent = 'Gagal membuat ZIP';
+      alert('Gagal menyimpan ZIP: ' + (error.message || error));
+      $('progressStatus').textContent = 'Gagal menyimpan ZIP';
     } finally {
       state.running = false; validateReady();
     }
@@ -461,14 +842,15 @@
     const sheetDoc = xmlDocument(await sheetEntry.async('text'), 'sheet');
     const rawRows = new Map();
     let maxFolder = 0;
+    let folderNameColumnEnabled = true;
     for (const cell of localElements(sheetDoc, 'c')) {
       const ref = cell.getAttribute('r') || '';
       const match = /^([A-Z]+)(\d+)$/i.exec(ref);
       if (!match) continue;
       const column = match[1].toUpperCase();
-      if (column !== 'B' && column !== 'C') continue;
+      if (column !== 'B' && column !== 'C' && column !== 'D') continue;
       const row = Number(match[2]);
-      if (!Number.isSafeInteger(row) || row < 2) continue;
+      if (!Number.isSafeInteger(row) || row < 1) continue;
       let value = '';
       const type = cell.getAttribute('t') || '';
       if (type === 'inlineStr') {
@@ -481,16 +863,21 @@
         }
       }
       value = String(value).trim();
-      if (!rawRows.has(row)) rawRows.set(row, { lat: '', lon: '' });
+      if (row === 1) {
+        if (column === 'D' && /PETUNJUK|INSTRUKSI/i.test(value)) folderNameColumnEnabled = false;
+        continue;
+      }
+      if (!rawRows.has(row)) rawRows.set(row, { lat: '', lon: '', folderName: '' });
       if (column === 'B') rawRows.get(row).lat = value;
       if (column === 'C') rawRows.get(row).lon = value;
-      if (value !== '') maxFolder = Math.max(maxFolder, row - 1);
+      if (column === 'D' && folderNameColumnEnabled) rawRows.get(row).folderName = value;
+      if ((column === 'B' || column === 'C') && value !== '') maxFolder = Math.max(maxFolder, row - 1);
     }
     if (maxFolder < 1) throw new Error('Belum ada koordinat di Excel. Isi Latitude kolom B dan Longitude kolom C mulai baris 2.');
 
     const coordinates = new Map();
     for (const [row, raw] of rawRows.entries()) {
-      if (raw.lat === '' && raw.lon === '') continue;
+      if (raw.lat === '' && raw.lon === '' && raw.folderName === '') continue;
       const folderNo = row - 1;
       const lat = parseCoordinate(raw.lat, -90, 90);
       const lon = parseCoordinate(raw.lon, -180, 180);
@@ -504,7 +891,7 @@
         else if (repairable) reason = 'Titik desimal kemungkinan dihapus atau dianggap sebagai pemisah ribuan oleh Excel. Periksa opsi pemulihan.';
         else reason = 'Koordinat tidak valid. Gunakan titik (.) sebagai pemisah desimal dan pastikan nilainya dalam rentang GPS.';
       }
-      coordinates.set(folderNo, { valid, lat, lon, rawLat: raw.lat, rawLon: raw.lon, reason, repairLat, repairLon, repairable, recovered: false });
+      coordinates.set(folderNo, { valid, lat, lon, rawLat: raw.lat, rawLon: raw.lon, folderName: cleanFolderLabel(raw.folderName), reason, repairLat, repairLon, repairable, recovered: false });
     }
     return { coordinates, maxFolder, sheetName: sheetNode.getAttribute('name') || 'Sheet1' };
   }
@@ -561,12 +948,13 @@
       photoCount++;
       const path = String(file.webkitRelativePath || '').replace(/\\/g, '/');
       const segments = path.split('/').filter(Boolean);
-      if (segments.length < 3 || !/^\d+$/.test(segments[1])) { unsorted++; continue; }
-      const folderNo = Number(segments[1]);
+      const folderMatch = segments.length >= 3 ? /^(\d+)(?:[.\s_-]+(.+))?$/.exec(segments[1]) : null;
+      if (!folderMatch) { unsorted++; continue; }
+      const folderNo = Number(folderMatch[1]);
       if (!Number.isSafeInteger(folderNo) || folderNo < 1) { unsorted++; continue; }
       if (!rootName) rootName = segments[0];
       if (!groups.has(folderNo)) groups.set(folderNo, []);
-      groups.get(folderNo).push({ file, relative: safeZipPath(segments.slice(1).join('/')) });
+      groups.get(folderNo).push({ file, relative: safeZipPath(segments.slice(1).join('/')), sourceFolderLabel: cleanFolderLabel(folderMatch[2] || '') });
     }
     for (const files of groups.values()) files.sort((a,b) => a.relative.localeCompare(b.relative));
     return { groups, rootName, unsorted, photoCount };
@@ -712,7 +1100,9 @@
       else if (coord?.recovered) { status = state.batchRecoveryConfirmed ? 'Pulih & disetujui' : 'Periksa hasil'; statusClass = state.batchRecoveryConfirmed ? 'recovered' : 'warn'; }
       else if (!coord || !coord.valid) { status = coord?.repairable ? 'Desimal hilang' : 'Lewati'; statusClass = 'warn'; }
       const row = document.createElement('tr');
-      const values = [String(folderNo), coord?.valid ? (coord.recovered ? coord.recoveredLatText : coord.lat.toFixed(6)) : (coord?.rawLat || '—'), coord?.valid ? (coord.recovered ? coord.recoveredLonText : coord.lon.toFixed(6)) : (coord?.rawLon || '—'), String(files.length)];
+      const sourceLabel = cleanFolderLabel(coord?.folderName) || cleanFolderLabel(files[0]?.sourceFolderLabel);
+      const outputFolderLabel = sourceLabel ? `${folderNo}. ${sourceLabel}` : String(folderNo);
+      const values = [outputFolderLabel, coord?.valid ? (coord.recovered ? coord.recoveredLatText : coord.lat.toFixed(6)) : (coord?.rawLat || '—'), coord?.valid ? (coord.recovered ? coord.recoveredLonText : coord.lon.toFixed(6)) : (coord?.rawLon || '—'), String(files.length)];
       for (const value of values) { const cell = document.createElement('td'); cell.textContent = value; row.append(cell); }
       const statusCell = document.createElement('td'); const badge = document.createElement('span'); badge.className = `mapping-status ${statusClass}`; badge.textContent = status; statusCell.append(badge); row.append(statusCell);
       body.append(row);
@@ -785,69 +1175,79 @@
     const totalEligibleFiles = eligibleGroups.reduce((sum, n) => sum + state.batchGroups.get(n).length, 0);
     if (!totalEligibleFiles) { alert('Tidak ada foto yang berada dalam jangkauan nomor koordinat Excel.'); return; }
 
-    beginProgress('Memproses Mode Batch...', totalEligibleFiles);
-    const zip = new JSZip();
-    const report = [['nomor_folder','nama_file','status','latitude','longitude','ukuran_asli','pesan']];
-    let success = 0, failed = 0, skipped = 0, ignoredFolders = 0, unreadable = 0, done = 0;
+    const parts = splitBatchIntoParts(eligibleGroups);
+    if (!parts.length) { alert('Tidak ada foto yang bisa dimasukkan ke ZIP.'); return; }
+    const baseFilename = cleanZipName($('batchZipName').value, 'hasil_geotag_batch');
+    const target = await chooseBatchOutputDirectory();
+    if (target.cancelled) return;
 
-    for (const folderNo of folders) {
-      const files = state.batchGroups.get(folderNo) || [];
-      if (folderNo > state.batchMaxFolder) {
-        ignoredFolders++;
-        for (const entry of files) report.push([folderNo, entry.relative, 'DIABAIKAN', '', '', entry.file.size, `Nomor folder melebihi nomor koordinat terakhir di Excel (${state.batchMaxFolder})`]);
-        continue;
+    const ignoredFolders = folders.filter(n => n > state.batchMaxFolder);
+    const ignoredRows = [];
+    for (const folderNo of ignoredFolders) {
+      for (const entry of (state.batchGroups.get(folderNo) || [])) {
+        ignoredRows.push([folderNo, entry.relative, 'DIABAIKAN', '', '', entry.file.size, `Nomor folder melebihi nomor koordinat terakhir di Excel (${state.batchMaxFolder})`]);
       }
-      const coord = state.batchCoordinates.get(folderNo);
-      for (const entry of files) {
-        const { file, relative } = entry;
-        $('currentFile').textContent = `Folder ${folderNo} / ${relative}`;
-        let originalBytes = null;
-        try {
-          originalBytes = new Uint8Array(await file.arrayBuffer());
-          if (!coord || !coord.valid) {
-            zip.file(relative, originalBytes, { binary: true, date: file.lastModified ? new Date(file.lastModified) : new Date() });
-            skipped++;
-            report.push([folderNo, relative, 'TANPA GPS', coord?.rawLat || '', coord?.rawLon || '', file.size, coord?.reason || 'Baris koordinat untuk folder ini kosong']);
-          } else {
-            const tagged = writeExifGps(originalBytes, coord.lat, coord.lon);
-            zip.file(relative, tagged, { binary: true, date: file.lastModified ? new Date(file.lastModified) : new Date() });
-            success++;
-            report.push([folderNo, relative, 'BERHASIL', coord.lat.toFixed(6), coord.lon.toFixed(6), file.size, coord.recovered ? 'GPS EXIF berhasil ditambahkan menggunakan koordinat hasil pemulihan desimal yang disetujui pengguna' : 'GPS EXIF berhasil ditambahkan']);
-          }
-        } catch (error) {
-          failed++;
-          if (originalBytes) {
-            zip.file(relative, originalBytes, { binary: true, date: file.lastModified ? new Date(file.lastModified) : new Date() });
-            report.push([folderNo, relative, 'GAGAL', coord?.lat ?? coord?.rawLat ?? '', coord?.lon ?? coord?.rawLon ?? '', file.size, String(error && error.message ? error.message : error)]);
-          } else {
-            unreadable++;
-            report.push([folderNo, relative, 'GAGAL BACA', coord?.rawLat || '', coord?.rawLon || '', file.size, String(error && error.message ? error.message : error)]);
-          }
+    }
+    const progressState = { done: 0, total: totalEligibleFiles };
+    const summaryStats = { success: 0, failed: 0, skipped: 0, unreadable: 0 };
+    resetBatchPartDownloads();
+
+    if (target.directoryHandle) {
+      beginProgress(`Membagi ${totalEligibleFiles} foto menjadi ${parts.length} ZIP tanpa memecah folder...`, totalEligibleFiles);
+      state.running = true;
+      validateReady();
+      const savedNames = [];
+      try {
+        for (let index = 0; index < parts.length; index++) {
+          $('progressStatus').textContent = `Memproses bagian ${index + 1} dari ${parts.length}...`;
+          const built = await buildBatchZipPart(parts[index], index, parts.length, progressState, ignoredRows);
+          summaryStats.success += built.stats.success;
+          summaryStats.failed += built.stats.failed;
+          summaryStats.skipped += built.stats.skipped;
+          summaryStats.unreadable += built.stats.unreadable;
+          const filename = batchPartFilename(baseFilename, index, parts.length);
+          $('progressStatus').textContent = `Menyimpan ZIP ${index + 1} dari ${parts.length}...`;
+          $('currentFile').textContent = filename;
+          const size = await saveZipToDirectory(built.zip, filename, target.directoryHandle);
+          savedNames.push(`${filename} (${formatBytes(size)})`);
         }
-        done++;
-        updateProgress(done, totalEligibleFiles, `Folder ${folderNo} / ${relative}`);
-        await new Promise(resolve => setTimeout(resolve, 0));
+        $('progressTitle').textContent = 'Semua bagian berhasil disimpan';
+        $('progressPercent').textContent = '100%';
+        $('progressFill').style.width = '100%';
+        $('progressStatus').textContent = `${parts.length} ZIP tersimpan ke folder pilihan`;
+        $('currentFile').textContent = '';
+        $('resultTitle').textContent = `${totalEligibleFiles} foto selesai diproses.`;
+        $('resultSummary').textContent = `${parts.length} ZIP terpisah sudah disimpan ke folder yang kamu pilih. Setiap folder bernomor utuh berada hanya di satu ZIP, jadi tidak ada folder yang terduplikasi antarbagian. Ekstrak semua ZIP ke folder tujuan yang sama untuk mengembalikan struktur foto bernomor.`;
+        $('downloadAgain').classList.add('hidden');
+        $('resultDetails').innerHTML = `<span><strong>${summaryStats.success}</strong> GPS berhasil</span><span><strong>${summaryStats.failed}</strong> gagal</span><span><strong>${parts.length}</strong> ZIP tersimpan</span><span><strong>${formatBytes(parts.reduce((sum, part) => sum + part.bytes, 0))}</strong> foto sumber</span>`;
+        const container = $('batchPartDownloads');
+        container.innerHTML = '';
+        container.classList.remove('hidden');
+        const heading = document.createElement('p');
+        heading.className = 'batch-download-intro';
+        heading.textContent = 'File yang tersimpan:';
+        const list = document.createElement('ul');
+        list.className = 'batch-saved-list';
+        savedNames.forEach(name => { const li = document.createElement('li'); li.textContent = name; list.appendChild(li); });
+        container.append(heading, list);
+        $('resultCard').classList.remove('hidden');
+      } catch (error) {
+        alert(`Ekspor terhenti. ${savedNames.length} ZIP sudah tersimpan; gagal saat membuat bagian berikutnya. Detail: ${error.message || error}`);
+        $('progressStatus').textContent = `Ekspor terhenti setelah ${savedNames.length} dari ${parts.length} ZIP`;
+      } finally {
+        state.running = false;
+        validateReady();
       }
+      return;
     }
 
-    report.push([]);
-    report.push(['Ringkasan','','','','','',`Berhasil: ${success}; gagal: ${failed}; tanpa GPS: ${skipped}; tidak dapat dibaca: ${unreadable}; folder diabaikan: ${ignoredFolders}`]);
-    report.push(['Catatan','','','','','','Folder bernomor di atas nomor koordinat terakhir di Excel tidak dimasukkan ke hasil ZIP.']);
-    zip.file('laporan_batch_geotag.csv', csvText(report));
-    $('progressStatus').textContent = 'Membuat file ZIP...';
-    $('currentFile').textContent = 'Mengemas foto dan laporan batch...';
-    try {
-      const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' }, meta => { $('progressStatus').textContent = `Mengemas ZIP ${Math.round(meta.percent || 0)}%`; });
-      const filename = cleanZipName($('batchZipName').value, 'hasil_geotag_batch');
-      const summary = `${success} foto berhasil diberi GPS. ${failed} foto gagal diproses; file yang berhasil dibaca tetap disertakan sebagai file asli. ${unreadable ? `${unreadable} foto tidak dapat dibaca sehingga tidak dapat dimasukkan ke ZIP. ` : ''}${skipped} foto tidak memiliki koordinat valid dan disertakan tanpa GPS. ${ignoredFolders} folder dengan nomor di atas batas Excel diabaikan.`;
-      finishResult(summary, success, failed, skipped, ignoredFolders, blob, filename);
-      $('progressCount').textContent = `${success} berhasil · ${failed} gagal · ${skipped} tanpa GPS`;
-    } catch (error) {
-      alert('Gagal membuat ZIP: ' + (error.message || error));
-      $('progressStatus').textContent = 'Gagal membuat ZIP';
-    } finally {
-      state.running = false; validateReady();
-    }
+    const session = {
+      parts, baseFilename, totalFiles: totalEligibleFiles, progressState,
+      nextIndex: 0, currentPart: null, downloaded: new Set(),
+      ignoredRows, stats: summaryStats
+    };
+    state.batchExportSession = session;
+    await prepareFallbackBatchPart(session);
   }
 
   folderInput.addEventListener('change', () => {

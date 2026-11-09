@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101827">
-  <meta name="description" content="Tambahkan metadata GPS ke banyak foto JPG/JPEG sekaligus. Gunakan Mode Satuan atau Mode Batch berbasis Excel, lalu unduh hasil ZIP dan laporan CSV. Semua proses berlangsung lokal di browser tanpa mengunggah foto ke server.">
+  <meta name="description" content="Tambahkan metadata GPS ke banyak foto JPG/JPEG sekaligus. Gunakan Mode Satuan atau Mode Batch berbasis Excel, lalu simpan hasil sebagai beberapa ZIP berukuran lebih ringan tanpa memecah satu folder ke beberapa ZIP, lengkap dengan laporan CSV per bagian. Semua proses berlangsung lokal di browser tanpa mengunggah foto ke server.">
   <meta name="robots" content="index,follow">
   <meta name="toolspace:title" content="GeoTag Studio">
   <meta name="toolspace:category" content="Photo &amp; Media">
@@ -105,7 +105,7 @@
           </div>
           <div class="batch-info-card">
             <strong>Cara membaca koordinat</strong>
-            <p>Folder <b>1</b> memakai Latitude di <b>B2</b> dan Longitude di <b>C2</b>. Folder <b>2</b> memakai B3/C3, lalu berlanjut sesuai nomor folder. Gunakan titik (<b>.</b>) sebagai pemisah desimal, misalnya <b>-7.257500</b> dan <b>112.752100</b>. Template memakai format teks agar titik tetap tampil meskipun pengaturan regional Excel menggunakan koma. Ganti nilai contoh sebelum memproses foto milikmu. Jika Excel mengubah titik menjadi pemisah ribuan, aplikasi akan menampilkan bantuan pemulihan dan meminta konfirmasi sebelum tagging.</p>
+            <p>Folder <b>1</b> memakai Latitude di <b>B2</b> dan Longitude di <b>C2</b>. Folder <b>2</b> memakai B3/C3, lalu berlanjut sesuai nomor folder. Kolom <b>D</b> boleh diisi nama folder keluaran (opsional), misalnya <b>Area Utara</b>; hasilnya menjadi <b>1. Area Utara</b>. Jika D dikosongkan, nama folder tetap angka seperti semula. Gunakan titik (<b>.</b>) sebagai pemisah desimal, misalnya <b>-7.257500</b> dan <b>112.752100</b>. Template memakai format teks agar titik tetap tampil meskipun pengaturan regional Excel menggunakan koma. Ganti nilai contoh sebelum memproses foto milikmu. Jika Excel mengubah titik menjadi pemisah ribuan, aplikasi akan menampilkan bantuan pemulihan dan meminta konfirmasi sebelum tagging.</p>
             <div class="batch-download-links">
               <a class="template-link" href="assets/Template_Koordinat_Batch.xlsx" download><span>↓</span> Unduh template Excel</a>
               <a class="template-link" href="assets/Contoh_Pengisian_Koordinat.xlsx" download><span>↓</span> Unduh contoh pengisian</a>
@@ -123,19 +123,19 @@
           <div class="batch-info-card compact">
             <strong>Contoh susunan folder</strong>
             <pre>Nama Folder Bebas/
-├── 1/   Foto untuk koordinat baris 2
-├── 2/   Foto untuk koordinat baris 3
+├── 1/   (atau 1. Area Utara/) · koordinat dari baris 2
+├── 2/   (atau 2. Area Selatan/) · koordinat dari baris 3
 └── 3/   Foto untuk koordinat baris 4</pre>
-            <p>Nama folder utama bebas. Pilih folder apa pun yang di dalamnya berisi subfolder bernama angka seperti 1, 2, 3, dan seterusnya. Nama file foto bebas; semua JPG/JPEG di dalam subfolder angka akan dibaca, termasuk yang berada di subfolder lebih dalam.</p>
+            <p>Nama folder utama bebas. Pilih folder apa pun yang di dalamnya berisi subfolder bernama angka seperti 1, 2, 3, dan seterusnya. Kamu juga boleh menamai subfolder seperti 1. Area Utara; nomor di depannya tetap dipakai untuk mencocokkan koordinat Excel. Nama file foto bebas; semua JPG/JPEG di dalam subfolder angka akan dibaca, termasuk yang berada di subfolder lebih dalam.</p>
           </div>
           <label class="file-picker-card" for="batchFolderInput">
-            <span class="picker-icon folder-picker-icon">DIR</span><span class="picker-copy"><strong id="batchFolderTitle">Pilih Folder Utama</strong><small id="batchFolderHint">Nama folder bebas. Di dalamnya harus ada subfolder angka seperti 1, 2, 3</small></span><span class="picker-action">Pilih folder</span>
+            <span class="picker-icon folder-picker-icon">DIR</span><span class="picker-copy"><strong id="batchFolderTitle">Pilih Folder Utama</strong><small id="batchFolderHint">Nama folder bebas. Subfolder dapat bernama 1, 2, 3 atau 1. Area Utara</small></span><span class="picker-action">Pilih folder</span>
             <input id="batchFolderInput" type="file" accept=".jpg,.jpeg,image/jpeg" webkitdirectory directory multiple>
           </label>
           <div id="batchSummary" class="batch-summary hidden" aria-live="polite"></div>
           <div id="batchMappingWrap" class="batch-mapping-wrap hidden">
             <div class="mapping-title"><strong>Pratinjau pencocokan</strong><span id="mappingCount"></span></div>
-            <div class="mapping-table-scroll"><table class="mapping-table"><thead><tr><th>Folder</th><th>Latitude</th><th>Longitude</th><th>Foto</th><th>Status</th></tr></thead><tbody id="mappingBody"></tbody></table></div>
+            <div class="mapping-table-scroll"><table class="mapping-table"><thead><tr><th>Folder hasil</th><th>Latitude</th><th>Longitude</th><th>Foto</th><th>Status</th></tr></thead><tbody id="mappingBody"></tbody></table></div>
             <p class="mapping-footnote">Folder yang nomornya melebihi nomor koordinat terakhir di Excel akan diabaikan. Baris koordinat kosong atau tidak valid akan dilewati.</p>
           </div>
           <section id="coordinateRecovery" class="coordinate-recovery hidden" aria-live="polite">
@@ -191,9 +191,10 @@
       <section class="result-card hidden" id="resultCard" aria-live="polite">
         <div class="result-symbol"><svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg></div>
         <div class="step-label">PROCESS COMPLETED</div>
-        <h2>Foto siap diunduh.</h2>
+        <h2 id="resultTitle">ZIP siap diunduh.</h2>
         <p id="resultSummary">Hasil GeoTag berhasil dibuat.</p>
-        <button class="download-button" type="button" id="downloadAgain"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M5 17v3h14v-3"/></svg> Unduh ZIP lagi</button>
+        <button class="download-button" type="button" id="downloadAgain"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5"/><path d="M5 17v3h14v-3"/></svg> Unduh ZIP</button>
+        <div class="batch-part-downloads hidden" id="batchPartDownloads"></div>
         <div class="result-details" id="resultDetails"></div>
       </section>
 
