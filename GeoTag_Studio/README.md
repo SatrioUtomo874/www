@@ -8,7 +8,7 @@
 - **Mode Batch:** membaca koordinat dari kolom B dan C file `.xlsx`, lalu memasangkannya ke subfolder bernomor `1`, `2`, `3`, dan seterusnya. Kolom D dapat dipakai untuk memberi nama folder hasil, misalnya `Area Utara` menjadi `1. Area Utara`.
 - Pratinjau jumlah folder, foto, koordinat, dan status pencocokan sebelum pemrosesan.
 - Deteksi kemungkinan titik desimal yang diubah Excel, dengan pemulihan manual dan persetujuan pengguna.
-- Hasil berupa ZIP, mempertahankan struktur subfolder foto, serta laporan CSV. Mode Batch otomatis membagi hasil menjadi beberapa ZIP dengan target ukuran sekitar 80 MB per bagian. Pembagian dilakukan per folder nomor secara utuh: satu folder sumber hanya masuk ke satu ZIP dan tidak pernah dipotong ke arsip lain. Jika satu folder sendiri lebih besar dari target, folder itu tetap dimasukkan utuh ke satu ZIP tersendiri.
+- **Dua format output Mode Batch:** ZIP atau Tampilan Folder. Output ZIP mempertahankan struktur subfolder foto, menyertakan laporan CSV, dan otomatis dibagi dengan target ukuran sekitar 80 MB per bagian. Pembagian dilakukan per folder nomor secara utuh: satu folder sumber hanya masuk ke satu ZIP dan tidak pernah dipotong ke arsip lain. Jika satu folder sendiri lebih besar dari target, folder itu tetap dimasukkan utuh ke satu ZIP tersendiri. Tampilan Folder mengelompokkan foto berdasarkan folder sumber dan memproses satu foto hanya ketika tombol unduhnya ditekan; hasil foto tidak ditahan sekaligus di RAM. Laporan CSV dapat diunduh dari tampilan tersebut.
 - Foto sumber tidak ditimpa; foto yang gagal diberi GPS tetap disertakan sebagai file asli jika dapat dibaca.
 - Seluruh pemrosesan dilakukan di browser. Foto dan workbook tidak diunggah ke server.
 
@@ -34,7 +34,9 @@ Path publik setelah deploy: `/GeoTag_Studio/`
 4. Pilih folder induk foto. Di dalamnya harus ada subfolder bernomor, misalnya `1`, `2`, `3`. Nama juga boleh langsung ditulis seperti `1. Area Utara`; nomor di depannya tetap dipakai untuk pencocokan. Foto di dalam subfolder lebih dalam juga dibaca.
 5. Periksa tabel pratinjau pencocokan. Folder yang nomornya melebihi data koordinat terakhir di Excel akan diabaikan.
 6. Bila aplikasi mendeteksi koordinat yang mungkin kehilangan titik desimal, pilih susunan titik yang benar, cocokkan kembali dengan sumber koordinat, lalu centang persetujuan.
-7. Jalankan pemrosesan. Di Chrome/Edge pada situs HTTPS, tentukan lokasi simpan saat dialog muncul; ZIP akan ditulis langsung ke disk. Di browser lain, klik **Unduh ZIP** setelah proses selesai. Arsip mencakup `laporan_batch_geotag.csv`.
+7. Pada **Pengaturan hasil batch**, pilih **Unduh ZIP** atau **Tampilan Folder**.
+8. Jika memilih ZIP, jalankan pemrosesan. Di Chrome/Edge pada situs HTTPS, tentukan lokasi simpan saat dialog muncul; ZIP akan ditulis langsung ke disk. Di browser lain, unduh ZIP bagian demi bagian. Setiap arsip mencakup laporan CSV.
+9. Jika memilih Tampilan Folder, klik tombol proses untuk menampilkan daftar foto yang dikelompokkan per folder. Klik **Unduh foto** pada foto yang diinginkan; foto baru dibaca dan diberi GPS saat tombol tersebut ditekan. Pada Chrome/Edge di situs HTTPS, kamu juga dapat memilih folder tujuan satu kali agar foto tersimpan langsung ke disk dengan struktur subfolder tetap dipertahankan. Tanpa fitur penyimpanan folder langsung, browser mengunduh setiap foto satu per satu dengan nama file yang diberi awalan folder sumber agar tidak bentrok. Laporan CSV tersedia melalui tombol **Unduh laporan CSV**.
 
 ## Format koordinat dan pemulihan Excel
 
@@ -61,7 +63,7 @@ Nama folder induk bebas. Nama subfolder tingkat pertama dapat berupa angka posit
 
 ## Privasi dan batasan
 
-- Tidak ada batas tetap 15 foto. Mode Batch membagi arsip otomatis dengan target sekitar 80 MB data foto sumber per ZIP. Pembagian selalu berdasarkan folder bernomor, bukan berdasarkan foto: seluruh foto dari satu folder tetap bersama di satu ZIP, dan nama folder yang sama tidak dibuat ulang di ZIP bagian lain. Folder yang ukurannya sendiri melebihi target akan masuk utuh ke ZIP tersendiri. Di Chrome/Edge pada HTTPS, pengguna memilih folder tujuan satu kali dan setiap ZIP dialirkan langsung ke disk. Browser tanpa dukungan simpan-folder langsung membuat dan mengunduh ZIP satu per satu agar tidak menahan seluruh kumpulan foto dalam satu Blob besar di RAM. Kapasitas praktis tetap bergantung pada memori perangkat/browser dan ruang penyimpanan.
+- Tidak ada batas tetap 15 atau 95 foto. Pada Mode Batch output ZIP, aplikasi membagi arsip dengan target sekitar 80 MB data foto sumber per ZIP. Pembagian selalu berdasarkan folder bernomor, bukan berdasarkan foto: seluruh foto dari satu folder tetap bersama di satu ZIP. Di Chrome/Edge pada HTTPS, pengguna memilih folder tujuan satu kali dan setiap ZIP dialirkan langsung ke disk. Browser tanpa dukungan penyimpanan folder langsung membuat ZIP satu per satu. Pada output Tampilan Folder, daftar file hanya menyimpan referensi File dari browser; isi foto baru dibaca dan diproses saat pengguna menekan tombol untuk foto tersebut. Hanya foto yang sedang diproses yang menjadi data hasil sementara. Penyimpanan langsung ke folder tujuan mempertahankan struktur folder; fallback unduhan browser memakai nama file unik dengan awalan folder. Kapasitas praktis tetap bergantung pada memori perangkat/browser dan ruang penyimpanan.
 - Pemrosesan berlangsung lokal di browser menggunakan JavaScript dan JSZip. Foto tidak diunggah ke server.
 - Tool ini hanya menerima JPG/JPEG dan file Excel `.xlsx` untuk Mode Batch. Format `.xls`, HEIC, PNG, dan RAW tidak didukung.
 - Koordinat ditulis ke metadata GPS EXIF. Aplikasi tidak menentukan lokasi foto secara otomatis.

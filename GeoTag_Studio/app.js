@@ -9,7 +9,8 @@
     batchExcelName: '', batchCoordinates: new Map(), batchMaxFolder: 0,
     batchGroups: new Map(), batchFolderLabel: '', batchPhotoCount: 0,
     batchUnsortedCount: 0, batchExcelError: '', batchExcelLoading: false,
-    batchRecoveryApplied: false, batchRecoveryConfirmed: false, batchExportSession: null
+    batchRecoveryApplied: false, batchRecoveryConfirmed: false, batchExportSession: null,
+    batchFolderOutputSession: null
   };
 
   // Keep each archive comfortably below typical browser-memory pressure.
@@ -85,6 +86,22 @@
     return valid ? { lat, lon } : null;
   }
 
+  function getBatchOutputMode() {
+    return document.querySelector('input[name="batchOutputMode"]:checked')?.value || 'zip';
+  }
+
+  function updateBatchOutputMode() {
+    const mode = getBatchOutputMode();
+    document.querySelectorAll('[data-output-option]').forEach(option => {
+      const active = option.dataset.outputOption === mode;
+      option.classList.toggle('active', active);
+      const radio = option.querySelector('input[type="radio"]');
+      if (radio) radio.checked = active;
+    });
+    $('batchZipNameRow').classList.toggle('hidden', mode !== 'zip');
+    validateReady();
+  }
+
   function validateReady() {
     const hasFiles = state.files.length > 0;
     const hasCoords = !!getCoordinates(false);
@@ -101,7 +118,8 @@
     });
     batchProcessButton.disabled = state.running || !hasBatchExcel || !hasBatchFolders || !hasMatch || unresolvedRecovery;
     const eligiblePhotoCount = Array.from(state.batchGroups.entries()).filter(([folderNo]) => folderNo <= state.batchMaxFolder).reduce((sum, [, files]) => sum + files.length, 0);
-    $('batchButtonLabel').textContent = state.running ? 'Sedang memproses...' : state.batchExcelLoading ? 'Membaca Excel...' : !state.batchExcelName ? 'Pilih file Excel terlebih dahulu' : !hasBatchFolders ? 'Pilih folder foto terlebih dahulu' : unresolvedRecovery ? 'Periksa dan setujui pemulihan koordinat terlebih dahulu' : !hasMatch ? 'Belum ada pasangan koordinat dan folder yang valid' : `Proses ${eligiblePhotoCount} foto dalam Mode Batch`;
+    const outputAction = getBatchOutputMode() === 'folder' ? 'Tampilkan daftar' : 'Proses & siapkan ZIP';
+    $('batchButtonLabel').textContent = state.running ? 'Sedang memproses...' : state.batchExcelLoading ? 'Membaca Excel...' : !state.batchExcelName ? 'Pilih file Excel terlebih dahulu' : !hasBatchFolders ? 'Pilih folder foto terlebih dahulu' : unresolvedRecovery ? 'Periksa dan setujui pemulihan koordinat terlebih dahulu' : !hasMatch ? 'Belum ada pasangan koordinat dan folder yang valid' : `${outputAction} untuk ${eligiblePhotoCount} foto`;
   }
 
   function setMode(mode) {
@@ -117,6 +135,7 @@
     $('resultCard').classList.add('hidden');
     $('progressCard').classList.add('hidden');
     resetBatchPartDownloads();
+    state.batchFolderOutputSession = null;
     validateReady();
   }
 
@@ -577,6 +596,7 @@
     const old = state.batchExportSession?.currentPart;
     if (old?.url) URL.revokeObjectURL(old.url);
     state.batchExportSession = null;
+    state.batchFolderOutputSession = null;
   }
 
   function renderBatchFallbackDownloads(session) {
@@ -702,6 +722,298 @@
       state.running = false;
       validateReady();
     }
+  }
+
+  function batchDownloadFilename(outputRelative) {
+    // Standard browser downloads cannot recreate nested folders. Prefix each
+    // filename so files with the same basename from different folders stay distinct.
+    return safeZipPath(outputRelative).split('/').join('__').replace(/[<>:"|?*\u0000-\u001F]/g, '_');
+  }
+
+  async function chooseBatchFolderDestination(session) {
+    if (!window.isSecureContext || typeof window.showDirectoryPicker !== 'function') {
+      alert('Penyimpanan langsung ke folder belum didukung browser ini. Tombol foto tetap bisa dipakai untuk mengunduh satu per satu melalui browser.');
+      return;
+    }
+    try {
+      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      session.directoryHandle = handle;
+      const button = $('batchChooseFolderButton');
+      if (button) button.textContent = `Folder tujuan: ${handle.name}`;
+      const note = $('batchFolderDestinationNote');
+      if (note) note.textContent = 'Foto akan disimpan langsung ke folder tujuan dengan susunan subfolder tetap dipertahankan.';
+    } catch (error) {
+      if (!error || error.name !== 'AbortError') {
+        console.warn('Folder destination selection failed.', error);
+        alert(`Tidak dapat memilih folder tujuan: ${error.message || error}`);
+      }
+    }
+  }
+
+  async function writeBlobToDirectory(rootHandle, relativePath, blob) {
+    const parts = safeZipPath(relativePath).split('/').filter(Boolean);
+    if (!parts.length) throw new Error('Jalur file hasil tidak valid.');
+    let directory = rootHandle;
+    for (const part of parts.slice(0, -1)) {
+      directory = await directory.getDirectoryHandle(part, { create: true });
+    }
+    const fileHandle = await directory.getFileHandle(parts[parts.length - 1], { create: true });
+    const writable = await fileHandle.createWritable();
+    try {
+      await writable.write(blob);
+      await writable.close();
+    } catch (error) {
+      try { await writable.abort(error); } catch (_) { /* preserve original error */ }
+      throw error;
+    }
+  }
+
+  function downloadBatchPhotoBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // The browser resolves the object URL after the click; a short lifetime
+    // avoids retaining dozens of full-size photo Blobs during manual downloads.
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  async function createBatchPhotoOutput(item) {
+    const { file } = item.entry;
+    const coord = item.coord;
+    if (!coord || !coord.valid) {
+      return {
+        blob: file,
+        status: 'TANPA GPS',
+        message: coord?.reason || 'Koordinat untuk folder ini kosong; file asli disalin tanpa perubahan.'
+      };
+    }
+
+    let sourceReadable = false;
+    try {
+      const originalBytes = new Uint8Array(await file.arrayBuffer());
+      sourceReadable = true;
+      const tagged = writeExifGps(originalBytes, coord.lat, coord.lon);
+      return {
+        blob: new Blob([tagged], { type: 'image/jpeg' }),
+        status: 'BERHASIL',
+        message: `GPS ${coord.lat.toFixed(6)}, ${coord.lon.toFixed(6)} berhasil ditambahkan.`
+      };
+    } catch (error) {
+      if (sourceReadable) {
+        return {
+          blob: file,
+          status: 'GAGAL',
+          message: `Penulisan GPS gagal; file asli tetap tersedia. ${error.message || error}`
+        };
+      }
+      return {
+        blob: null,
+        status: 'GAGAL BACA',
+        message: `File tidak dapat dibaca. ${error.message || error}`
+      };
+    }
+  }
+
+  function buildFolderModeReport(session) {
+    const rows = [['nomor_folder','nama_file','status','latitude','longitude','ukuran_asli','pesan']];
+    for (const item of session.items) {
+      const status = item.status || 'BELUM DIUNDUH';
+      const coord = item.coord;
+      rows.push([
+        item.folderNo,
+        item.outputRelative,
+        status,
+        coord?.valid ? coord.lat.toFixed(6) : (coord?.rawLat || ''),
+        coord?.valid ? coord.lon.toFixed(6) : (coord?.rawLon || ''),
+        item.entry.file.size,
+        item.message || (status === 'BELUM DIUNDUH' ? 'Foto belum diproses; proses hanya berjalan saat tombol unduh ditekan.' : '')
+      ]);
+    }
+    if (session.ignoredRows.length) rows.push(...session.ignoredRows);
+    rows.push([]);
+    rows.push(['Ringkasan','','','','','',`Total foto: ${session.items.length}; berhasil: ${session.items.filter(x => x.status === 'BERHASIL').length}; tanpa GPS: ${session.items.filter(x => x.status === 'TANPA GPS').length}; gagal: ${session.items.filter(x => x.status === 'GAGAL' || x.status === 'GAGAL BACA' || x.status === 'GAGAL SIMPAN').length}`]);
+    rows.push(['Catatan','','','','','','Mode Folder memproses setiap foto saat tombol unduh ditekan. File belum diproses tidak disimpan di memori sebagai Blob hasil.']);
+    return csvText(rows);
+  }
+
+  function downloadBatchFolderReport(session) {
+    const blob = new Blob([buildFolderModeReport(session)], { type: 'text/csv;charset=utf-8' });
+    downloadBatchPhotoBlob(blob, 'laporan_batch_geotag_folder.csv');
+  }
+
+  function renderBatchFolderOutput(session) {
+    const container = $('batchPartDownloads');
+    container.innerHTML = '';
+    container.classList.remove('hidden');
+
+    const intro = document.createElement('p');
+    intro.className = 'batch-download-intro';
+    intro.textContent = `Daftar berisi ${session.items.length} foto dalam ${session.groups.length} folder. Foto baru dibaca dan diberi GPS ketika tombol pada baris foto ditekan; hasil foto tidak ditumpuk di RAM.`;
+    container.appendChild(intro);
+
+    if (window.isSecureContext && typeof window.showDirectoryPicker === 'function') {
+      const destinationRow = document.createElement('div');
+      destinationRow.className = 'batch-folder-destination';
+      const destinationButton = document.createElement('button');
+      destinationButton.type = 'button';
+      destinationButton.className = 'batch-directory-button';
+      destinationButton.id = 'batchChooseFolderButton';
+      destinationButton.textContent = 'Pilih folder tujuan (opsional)';
+      destinationButton.addEventListener('click', () => chooseBatchFolderDestination(session));
+      const destinationNote = document.createElement('p');
+      destinationNote.id = 'batchFolderDestinationNote';
+      destinationNote.className = 'batch-folder-destination-note';
+      destinationNote.textContent = 'Pilih folder agar foto tersimpan langsung ke disk dengan struktur folder sumber tetap utuh. Tanpa memilihnya, foto diunduh satu per satu melalui browser.';
+      destinationRow.append(destinationButton, destinationNote);
+      container.appendChild(destinationRow);
+    }
+
+    const reportButton = document.createElement('button');
+    reportButton.type = 'button';
+    reportButton.className = 'batch-report-button';
+    reportButton.textContent = 'Unduh laporan CSV';
+    reportButton.addEventListener('click', () => downloadBatchFolderReport(session));
+    container.appendChild(reportButton);
+
+    const list = document.createElement('div');
+    list.className = 'batch-folder-list';
+    for (const group of session.groups) {
+      const section = document.createElement('section');
+      section.className = 'batch-output-folder';
+      const heading = document.createElement('div');
+      heading.className = 'batch-output-folder-heading';
+      const folderName = document.createElement('strong');
+      folderName.textContent = group.outputFolder;
+      const folderMeta = document.createElement('span');
+      folderMeta.textContent = `${group.items.length} foto · ${group.coord?.valid ? 'GPS siap' : 'tanpa koordinat valid'}`;
+      heading.append(folderName, folderMeta);
+      const files = document.createElement('div');
+      files.className = 'batch-output-files';
+
+      for (const item of group.items) {
+        const row = document.createElement('div');
+        row.className = 'batch-output-file';
+        const copy = document.createElement('div');
+        copy.className = 'batch-output-file-copy';
+        const name = document.createElement('strong');
+        name.textContent = item.displayPath;
+        const detail = document.createElement('span');
+        detail.textContent = `${formatBytes(item.entry.file.size)} · Menunggu diproses`;
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.className = 'batch-photo-download-button';
+        action.dataset.completed = 'false';
+        action.textContent = item.coord?.valid ? 'Unduh foto' : 'Unduh asli';
+        action.addEventListener('click', () => downloadBatchFolderItem(session, item, action, detail));
+        copy.append(name, detail);
+        row.append(copy, action);
+        files.appendChild(row);
+      }
+      section.append(heading, files);
+      list.appendChild(section);
+    }
+    container.appendChild(list);
+
+    const total = document.createElement('p');
+    total.className = 'batch-download-status';
+    total.id = 'batchFolderOutputStatus';
+    total.textContent = 'Belum ada foto yang diproses.';
+    container.appendChild(total);
+  }
+
+  async function downloadBatchFolderItem(session, item, button, detail) {
+    if (session.busy || item.busy || item.completed) return;
+    session.busy = true;
+    item.busy = true;
+    state.running = true;
+    validateReady();
+    const photoButtons = Array.from($('batchPartDownloads').querySelectorAll('.batch-photo-download-button'));
+    photoButtons.forEach(photoButton => { photoButton.disabled = true; });
+    button.textContent = 'Memproses...';
+    detail.textContent = `${formatBytes(item.entry.file.size)} · Membaca dan menulis GPS...`;
+
+    try {
+      const output = await createBatchPhotoOutput(item);
+      item.status = output.status;
+      item.message = output.message;
+      if (!output.blob) {
+        item.completed = true;
+        button.dataset.completed = 'true';
+        button.textContent = 'Gagal dibaca';
+        detail.textContent = output.message;
+        button.classList.add('is-failed');
+      } else if (session.directoryHandle) {
+        await writeBlobToDirectory(session.directoryHandle, item.outputRelative, output.blob);
+        item.completed = true;
+        button.dataset.completed = 'true';
+        button.textContent = 'Tersimpan';
+        detail.textContent = `${formatBytes(output.blob.size)} · ${output.status} · Tersimpan ke folder tujuan`;
+      } else {
+        downloadBatchPhotoBlob(output.blob, batchDownloadFilename(item.outputRelative));
+        item.completed = true;
+        button.dataset.completed = 'true';
+        button.textContent = 'Terunduh';
+        detail.textContent = `${formatBytes(output.blob.size)} · ${output.status} · ${output.message}`;
+      }
+    } catch (error) {
+      item.status = 'GAGAL SIMPAN';
+      item.message = `Tidak dapat menyimpan file: ${error.message || error}`;
+      button.disabled = false;
+      button.textContent = 'Coba lagi';
+      button.classList.add('is-failed');
+      detail.textContent = item.message;
+    } finally {
+      item.busy = false;
+      session.busy = false;
+      state.running = false;
+      photoButtons.forEach(photoButton => { photoButton.disabled = photoButton.dataset.completed === 'true'; });
+      validateReady();
+      const completed = session.items.filter(entry => entry.completed).length;
+      const success = session.items.filter(entry => entry.status === 'BERHASIL').length;
+      const noGps = session.items.filter(entry => entry.status === 'TANPA GPS').length;
+      const failed = session.items.filter(entry => entry.status === 'GAGAL' || entry.status === 'GAGAL BACA' || entry.status === 'GAGAL SIMPAN').length;
+      const status = $('batchFolderOutputStatus');
+      if (status) status.textContent = `${completed}/${session.items.length} foto selesai · ${success} GPS berhasil · ${noGps} tanpa GPS · ${failed} gagal`;
+    }
+  }
+
+  function prepareBatchFolderOutput(eligibleGroups, ignoredRows, totalEligibleFiles) {
+    const groups = [];
+    const items = [];
+    for (const folderNo of eligibleGroups) {
+      const coord = state.batchCoordinates.get(folderNo);
+      const entries = state.batchGroups.get(folderNo) || [];
+      if (!entries.length) continue;
+      const folderLabel = cleanFolderLabel(coord?.folderName) || cleanFolderLabel(entries[0]?.sourceFolderLabel);
+      const outputFolder = folderLabel ? `${folderNo}. ${folderLabel}` : String(folderNo);
+      const groupItems = entries.map(entry => {
+        const outputRelative = batchOutputRelativePath(entry.relative, folderNo, folderLabel);
+        const relativeSegments = safeZipPath(outputRelative).split('/');
+        const item = {
+          folderNo, entry, coord, outputRelative,
+          displayPath: relativeSegments.slice(1).join('/') || entry.file.name,
+          busy: false, completed: false, status: null, message: ''
+        };
+        items.push(item);
+        return item;
+      });
+      groups.push({ folderNo, outputFolder, coord, items: groupItems });
+    }
+
+    const session = { groups, items, ignoredRows, totalFiles: totalEligibleFiles, directoryHandle: null };
+    state.batchFolderOutputSession = session;
+    $('progressCard').classList.add('hidden');
+    $('resultTitle').textContent = 'Daftar foto siap diunduh.';
+    $('resultSummary').textContent = 'Pilih foto yang ingin diunduh. Pemrosesan GPS dilakukan hanya untuk foto yang kamu pilih, satu per satu. Foto yang belum diunduh tidak diproses.';
+    $('downloadAgain').classList.add('hidden');
+    $('resultDetails').innerHTML = `<span><strong>${items.length}</strong> foto</span><span><strong>${groups.length}</strong> folder</span><span><strong>${ignoredRows.length}</strong> foto di luar jangkauan Excel</span>`;
+    renderBatchFolderOutput(session);
+    $('resultCard').classList.remove('hidden');
   }
 
   function beginProgress(title, total) {
@@ -1151,6 +1463,7 @@
     state.batchPhotoCount = parsed.photoCount;
     state.batchUnsortedCount = parsed.unsorted;
     state.zipBlob = null;
+    resetBatchPartDownloads();
     $('resultCard').classList.add('hidden');
     $('batchFolderTitle').textContent = parsed.rootName ? `Folder utama: ${parsed.rootName}` : 'Folder utama belum berisi subfolder angka';
     const folderCount = parsed.groups.size;
@@ -1168,12 +1481,26 @@
     if (unresolvedRecovery) { alert('Ada koordinat yang kemungkinan kehilangan titik desimal. Pulihkan, periksa hasilnya, lalu centang persetujuan sebelum memproses.'); return; }
     const matchedFolderNumbers = Array.from(state.batchGroups.keys()).filter(n => n <= state.batchMaxFolder && state.batchCoordinates.get(n)?.valid);
     if (!matchedFolderNumbers.length) { alert('Belum ada folder yang cocok dengan koordinat valid di Excel.'); return; }
-    if (typeof JSZip === 'undefined') { alert('Library ZIP tidak ditemukan. Pastikan folder lib tidak dipindahkan.'); return; }
+    const outputMode = getBatchOutputMode();
+    if (outputMode === 'zip' && typeof JSZip === 'undefined') { alert('Library ZIP tidak ditemukan. Pastikan folder lib tidak dipindahkan.'); return; }
 
     const folders = Array.from(state.batchGroups.keys()).sort((a,b) => a-b);
     const eligibleGroups = folders.filter(n => n <= state.batchMaxFolder);
     const totalEligibleFiles = eligibleGroups.reduce((sum, n) => sum + state.batchGroups.get(n).length, 0);
     if (!totalEligibleFiles) { alert('Tidak ada foto yang berada dalam jangkauan nomor koordinat Excel.'); return; }
+
+    if (outputMode === 'folder') {
+      const ignoredFolders = folders.filter(n => n > state.batchMaxFolder);
+      const ignoredRows = [];
+      for (const folderNo of ignoredFolders) {
+        for (const entry of (state.batchGroups.get(folderNo) || [])) {
+          ignoredRows.push([folderNo, entry.relative, 'DIABAIKAN', '', '', entry.file.size, `Nomor folder melebihi nomor koordinat terakhir di Excel (${state.batchMaxFolder})`]);
+        }
+      }
+      resetBatchPartDownloads();
+      prepareBatchFolderOutput(eligibleGroups, ignoredRows, totalEligibleFiles);
+      return;
+    }
 
     const parts = splitBatchIntoParts(eligibleGroups);
     if (!parts.length) { alert('Tidak ada foto yang bisa dimasukkan ke ZIP.'); return; }
@@ -1263,6 +1590,7 @@
   document.querySelectorAll('.mode-tab').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
   $('excelInput').addEventListener('change', () => handleExcelSelection($('excelInput').files?.[0] || null));
   $('batchFolderInput').addEventListener('change', () => handleBatchFolderSelection($('batchFolderInput').files || []));
+  document.querySelectorAll('input[name="batchOutputMode"]').forEach(input => input.addEventListener('change', updateBatchOutputMode));
   $('recoveryLatDigits').addEventListener('change', () => { resetAppliedRecovery(); updateBatchPreview(); });
   $('recoveryLonDigits').addEventListener('change', () => { resetAppliedRecovery(); updateBatchPreview(); });
   $('applyCoordinateRecovery').addEventListener('click', applyCoordinateRecovery);
@@ -1276,5 +1604,6 @@
 
   window.GeoTagStudioCore = Object.freeze({ writeExifGps, readXlsxCoordinates, groupBatchFiles, parseCoordinate, collapsedCoordinateDigits, decimalRestorationCandidates });
   updateCoordinatePreview();
+  updateBatchOutputMode();
   updateBatchPreview();
 })();

@@ -89,3 +89,45 @@
 .batch-next-button:disabled{cursor:not-allowed;background:#314657;color:#8194a6;transform:none;box-shadow:none}
 .batch-saved-list{padding-left:18px;margin:8px 0 0;color:#bdcbd8;font-size:10px;line-height:1.9;overflow-wrap:anywhere}
 @media(max-width:600px){.batch-download-item{align-items:stretch;flex-direction:column}.batch-download-link{max-width:none;width:100%}}
+
+/* Mode Batch: output selection and on-demand folder downloads. */
+.batch-output-setting{padding:14px 0;border-bottom:1px solid rgba(99,121,146,.17)}
+.batch-output-label{display:block;font-size:10px;color:#aab9c9;margin-bottom:9px}
+.batch-output-options{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.batch-output-option{position:relative;display:flex;align-items:center;gap:9px;min-width:0;padding:11px;border:1px solid #30465b;border-radius:9px;background:rgba(9,20,33,.38);cursor:pointer;transition:.18s}
+.batch-output-option:hover{border-color:#54758a}
+.batch-output-option.active{border-color:rgba(105,221,186,.7);background:rgba(105,221,186,.07)}
+.batch-output-option input{position:absolute;opacity:0;pointer-events:none}
+.batch-output-option:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.batch-output-option-icon{width:34px;height:34px;display:grid;place-items:center;flex:none;border-radius:8px;background:#203346;color:#9bb4c8;font:800 8px var(--display);letter-spacing:.3px}
+.batch-output-option.active .batch-output-option-icon{background:rgba(105,221,186,.13);color:var(--accent)}
+.batch-output-option-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
+.batch-output-option-copy strong{font-size:10px;color:#e8f0f5}
+.batch-output-option-copy small{font-size:8px;line-height:1.45;color:#8295a9}
+.batch-folder-destination{display:flex;flex-direction:column;gap:8px;padding:11px;border:1px solid #30465b;border-radius:9px;background:rgba(255,255,255,.025);margin-bottom:11px}
+.batch-directory-button,.batch-report-button{border:1px solid #3d5d70;border-radius:8px;background:#1d3547;color:#c8e2e4;padding:10px 12px;font:600 10px var(--font);cursor:pointer}
+.batch-directory-button:hover,.batch-report-button:hover{border-color:var(--accent);color:var(--accent)}
+.batch-folder-destination-note{font-size:9px;line-height:1.6;color:#8da1b5;margin:0}
+.batch-report-button{width:100%;margin:0 0 12px;background:rgba(105,221,186,.07);border-color:rgba(105,221,186,.35);color:#9be8cf}
+.batch-folder-list{display:flex;flex-direction:column;gap:10px;max-height:490px;overflow:auto;padding-right:3px}
+.batch-output-folder{border:1px solid #2b4054;border-radius:9px;overflow:hidden;background:rgba(9,20,33,.3)}
+.batch-output-folder-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:rgba(255,255,255,.035);border-bottom:1px solid rgba(99,121,146,.16)}
+.batch-output-folder-heading strong{font-size:10px;color:#e8f0f5;overflow-wrap:anywhere}
+.batch-output-folder-heading span{font-size:8px;color:#8da1b5;text-align:right;flex:none}
+.batch-output-files{display:flex;flex-direction:column}
+.batch-output-file{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border-top:1px solid rgba(99,121,146,.1)}
+.batch-output-file:first-child{border-top:0}
+.batch-output-file-copy{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.batch-output-file-copy strong{font-size:9px;font-weight:600;color:#c9d6e1;overflow-wrap:anywhere}
+.batch-output-file-copy span{font-size:8px;line-height:1.45;color:#8196aa;overflow-wrap:anywhere}
+.batch-photo-download-button{flex:none;min-width:86px;border:1px solid rgba(105,221,186,.38);border-radius:7px;background:rgba(105,221,186,.08);color:#9be8cf;padding:8px 9px;font:600 8px var(--font);cursor:pointer}
+.batch-photo-download-button:hover:not(:disabled){background:rgba(105,221,186,.16);border-color:var(--accent)}
+.batch-photo-download-button:disabled{opacity:.75;cursor:default}
+.batch-photo-download-button.is-failed{border-color:rgba(243,135,135,.4);background:rgba(243,135,135,.08);color:#f0a4a4}
+@media(max-width:600px){
+  .batch-output-options{grid-template-columns:1fr}
+  .batch-output-file{align-items:flex-start}
+  .batch-photo-download-button{min-width:80px}
+  .batch-output-folder-heading{align-items:flex-start;flex-direction:column;gap:4px}
+  .batch-output-folder-heading span{text-align:left}
+}

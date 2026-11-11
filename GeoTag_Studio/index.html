@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101827">
-  <meta name="description" content="Tambahkan metadata GPS ke banyak foto JPG/JPEG sekaligus. Gunakan Mode Satuan atau Mode Batch berbasis Excel, lalu simpan hasil sebagai beberapa ZIP berukuran lebih ringan tanpa memecah satu folder ke beberapa ZIP, lengkap dengan laporan CSV per bagian. Semua proses berlangsung lokal di browser tanpa mengunggah foto ke server.">
+  <meta name="description" content="Tambahkan metadata GPS ke banyak foto JPG/JPEG sekaligus. Gunakan Mode Satuan atau Mode Batch berbasis Excel, lalu pilih output ZIP atau daftar foto per folder dengan unduhan satu per satu. Semua proses berlangsung lokal di browser tanpa mengunggah foto ke server.">
   <meta name="robots" content="index,follow">
   <meta name="toolspace:title" content="GeoTag Studio">
   <meta name="toolspace:category" content="Photo &amp; Media">
@@ -171,8 +171,23 @@
           </section>
           <div class="section-heading settings-heading"><div><div class="step-label">03 / EKSPOR</div><h2>Pengaturan hasil batch</h2></div></div>
           <div class="settings-card">
-            <div class="setting-row"><span class="setting-icon"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6Z"/><path d="m9 12 2 2 4-4"/></svg></span><div class="setting-copy"><strong>Foto asli tetap aman</strong><span>Hasil disalin ke ZIP dengan struktur folder bernomor.</span></div><span class="status-check">✓</span></div>
-            <label class="filename-field"><span>Nama file ZIP</span><div><input id="batchZipName" type="text" value="hasil_geotag_batch" maxlength="70"><span>.zip</span></div></label>
+            <div class="setting-row"><span class="setting-icon"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6Z"/><path d="m9 12 2 2 4-4"/></svg></span><div class="setting-copy"><strong>Foto asli tetap aman</strong><span>GeoTag Studio membuat salinan; file sumber tidak ditimpa.</span></div><span class="status-check">✓</span></div>
+            <div class="batch-output-setting">
+              <span class="batch-output-label">Pilih format output</span>
+              <div class="batch-output-options" role="radiogroup" aria-label="Format output Mode Batch">
+                <label class="batch-output-option active" data-output-option="zip">
+                  <input type="radio" name="batchOutputMode" value="zip" checked>
+                  <span class="batch-output-option-icon">ZIP</span>
+                  <span class="batch-output-option-copy"><strong>Unduh ZIP</strong><small>Semua foto dikemas per bagian.</small></span>
+                </label>
+                <label class="batch-output-option" data-output-option="folder">
+                  <input type="radio" name="batchOutputMode" value="folder">
+                  <span class="batch-output-option-icon">DIR</span>
+                  <span class="batch-output-option-copy"><strong>Tampilan Folder</strong><small>Lihat foto per folder dan unduh satu per satu.</small></span>
+                </label>
+              </div>
+            </div>
+            <label class="filename-field" id="batchZipNameRow"><span>Nama file ZIP</span><div><input id="batchZipName" type="text" value="hasil_geotag_batch" maxlength="70"><span>.zip</span></div></label>
           </div>
           <div class="action-area">
             <button class="primary-button" type="button" id="batchProcessButton" disabled><span class="button-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg></span><span id="batchButtonLabel">Masukkan Excel dan folder foto</span><span class="button-arrow">→</span></button>
